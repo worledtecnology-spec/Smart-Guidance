@@ -8,6 +8,8 @@ const CONFIG = {
   pin: "2026"         // الرقم السري للأدمن في الوضع المحلي فقط (لو تعذر الاتصال بـ Firebase)
 };
 // إعدادات مشروع Firebase (Firestore + Authentication)
+// نطاق داخلي لحسابات الطلاب: اسم المستخدم "s101" يصبح s101@students.smart-guidance.app (لا يُرسل إليه بريد)
+const STUDENT_EMAIL_DOMAIN = "students.smart-guidance.app";
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyA5GQmimLhIgh0Vwts58KUIM0TmjCKQsxk",
   authDomain: "drmona-77077.firebaseapp.com",

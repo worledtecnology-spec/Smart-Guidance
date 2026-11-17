@@ -2,7 +2,7 @@
 /* ================= أساسيات ================= */
 const PAGE = document.body.dataset.page || "home";
 const PI = document.body.dataset.i != null ? +document.body.dataset.i : null;
-// نمط التوجيه يتحدد لكل طالب من نتيجة مقياس الأسلوب المعرفي
+// نمط التوجيه يتحدد لكل طالب من نتيجة مقياس الأساليب المعرفية
 let A = false, PNAME = "";
 const NL = MOD.lessons.length;
 const LETTERS = ["أ","ب","ج","د"];
@@ -98,7 +98,7 @@ function gate(){
 const SECTION = {home:"home", instructions:"instructions", login:"account", scale:"scale", scaleResult:"scale", summary:"summary", admin:"admin"};
 function topBar(){
   const st = S(), sec = SECTION[PAGE] != null ? SECTION[PAGE] : "modules";
-  const items = [["home",U.home,"home","الرئيسية","#2f7cf6"],["instructions",U.instructions,"info","التعليمات","#f59e0b"],["scale",U.scale,"shapes","مقياس الأسلوب","#8b5cf6"],
+  const items = [["home",U.home,"home","الرئيسية","#2f7cf6"],["instructions",U.instructions,"info","التعليمات","#f59e0b"],["scale",U.scale,"shapes","مقياس الأساليب المعرفية","#8b5cf6"],
                  ["modules",U.modules,"layers","الموديولات","#10b981"],["summary",U.summary,"chart","ملخص الأداء","#ec4899"]];
   const locked = !st || !scaleDone(st);
   const nv = items.map(([k,h,i,t,c])=>{ if(k==="modules" && locked) i = "lock"; return [k,h,i,t,c]; }).map(([k,h,i,t,c])=>`<a class="nv ${sec===k?"on":""}" href="${h}" style="--c:${c}" ${sec===k?'aria-current="page"':""}><span class="nb">${ic(i)}</span><span class="nl">${t}</span></a>`).join("");
@@ -132,22 +132,22 @@ function pHome(){
 
 /* ================= التعليمات ================= */
 function pInstructions(){
-  const steps = [["user","سجل بياناتك","اكتب اسمك وكودك مرة واحدة، وادخل بهما في كل مرة."],["shapes","أجب عن مقياس الأسلوب المعرفي","اختباران فرعيان من 16 مفردة، يُحسب زمنهما آلياً."],
+  const steps = [["user","سجّل دخولك","باسم المستخدم وكلمة المرور اللي استلمتهم من القائم على التجربة."],["shapes","أجب عن مقياس الأساليب المعرفية","اختباران فرعيان من 16 مفردة، يُحسب زمنهما آلياً."],
     ["test","أدِّ الاختبار القبلي","قبل دراسة الموديول."],["book","ادرس الموضوعات بالترتيب","لكل موضوع صفحة محتوى، ثم صفحة نشاط، ثم صفحة تقويم ذاتي."],
     ["test","أدِّ الاختبار البعدي","بعد إتمام كل موضوعات الموديول."],["chart","راجع ملخص أدائك","درجاتك وتقدمك."]];
-  const rules = [["lock","الموضوعات تُفتح بالترتيب، ولا يُفتح موضوع قبل إتمام السابق."],["clock","مقياس الأسلوب والاختباران يُؤدَّى كل منها مرة واحدة فقط."],
+  const rules = [["lock","الموضوعات تُفتح بالترتيب، ولا يُفتح موضوع قبل إتمام السابق."],["clock","مقياس الأساليب المعرفية والاختباران يُؤدَّى كل منها مرة واحدة فقط."],
     ["save","إجاباتك تُحفظ تلقائياً على هذا الجهاز، فاستخدم نفس الجهاز والمتصفح دائماً."],["shield","الأنشطة العملية تُنفذ في المعمل بعد فصل الكهرباء واتباع قواعد السلامة."],
     ["pen","اكتب إجاباتك بأسلوبك، فالمطلوب تفكيرك أنت."],["help","إذا واجهتك مشكلة فنية فارجع إلى القائم على التجربة."]];
   return head("info","تعليمات استخدام البيئة","اقرأ هذه التعليمات قبل أن تبدأ.")+`
     <h2 class="sec"><span class="si">${ic("steps")}</span>خطوات السير داخل البيئة</h2>
     <div class="g3">${steps.map((s,k)=>`<div class="tile"><span class="stepno">${k+1}</span><div class="ti">${ic(s[0])}</div><h3>${s[1]}</h3><p class="muted small">${s[2]}</p></div>`).join("")}</div>
     <h2 class="sec"><span class="si">${ic("brain")}</span>التوجيه الذكي</h2>
-    <div class="def">${ic("brain")}<div>لا تُفتح الموديولات إلا بعد إجابتك عن مقياس الأسلوب المعرفي. تحلل البيئة نتيجتك وتحدد أسلوبك (تحليلي أو كلي)، ثم توجهك تلقائياً إلى نمط التوجيه المناسب لك، وتدرس كل الأنشطة وفقه.</div></div>
+    <div class="def">${ic("brain")}<div>لا تُفتح الموديولات إلا بعد إجابتك عن مقياس الأساليب المعرفية. تحلل البيئة نتيجتك وتحدد أسلوبك (تحليلي أو كلي)، ثم توجهك تلقائياً إلى نمط التوجيه المناسب لك، وتدرس كل الأنشطة وفقه.</div></div>
     ${PNAME?`<h2 class="sec"><span class="si">${ic(A?"steps":"map")}</span>نمط التوجيه الخاص بك: ${PNAME}</h2>
     <div class="def">${ic(A?"steps":"map")}<div>${A?"تُقدَّم لك المهمة في كل نشاط مقسمة إلى خطوات فرعية متتابعة. تنجز خطوة ثم تُفتح التالية، وتحصل على تغذية راجعة محددة عند كل إجراء.":"تُعرض عليك المهمة في كل نشاط كاملة مع خريطة توجيه تربط جوانبها ببعضها. تنظر للصورة الكلية أولاً، ثم تكوّن تصوراً متكاملاً."}</div></div>`:""}
     <h2 class="sec"><span class="si">${ic("flag")}</span>قواعد مهمة</h2>
     <div class="ilist">${rules.map(r=>`<div class="il"><div class="ii">${ic(r[0])}</div><span>${r[1]}</span></div>`).join("")}</div>`
-    + pager(null, S() ? (scaleDone(S()) ? {href:U.modules, t:"الموديولات"} : {href:U.scale, t:"مقياس الأسلوب المعرفي"}) : {href:U.login, t:"تسجيل الدخول"});
+    + pager(null, S() ? (scaleDone(S()) ? {href:U.modules, t:"الموديولات"} : {href:U.scale, t:"مقياس الأساليب المعرفية"}) : {href:U.login, t:"تسجيل الدخول"});
 }
 
 /* ================= الدخول ================= */
@@ -156,10 +156,10 @@ function pLogin(){
   if(st) return head("user","تسجيل الدخول")+`<div class="card stack" style="max-width:560px;width:100%;margin:0 auto">
       <div class="fb ok">${ic("check")}<span>أنت مسجل الآن باسم <b>${esc(st.name)}</b>.</span></div>
       <div class="row"><a class="btn" href="${scaleDone(st)?U.modules:U.scale}">متابعة${ic("next")}</a><button class="btn ghost" data-act="logoutHere">لست أنا، تسجيل خروج</button></div></div>`;
-  return head("user","تسجيل بيانات الطالب","اكتب اسمك وكودك، وادخل بهما في كل مرة.")+`<div class="card" style="max-width:560px;width:100%;margin:0 auto">
+  return head("user","دخول الطالب","ادخل باسم المستخدم وكلمة المرور اللي استلمتهم من القائم على التجربة.")+`<div class="card" style="max-width:560px;width:100%;margin:0 auto">
     <form id="loginForm" class="stack" novalidate>
-      <div><label for="fName">الاسم الرباعي</label><input type="text" id="fName" autocomplete="off"></div>
-      <div><label for="fCode">كود الطالب / رقم الجلوس</label><input type="text" id="fCode" autocomplete="off" inputmode="numeric"></div>
+      <div><label for="fUser">اسم المستخدم</label><input type="text" id="fUser" dir="ltr" autocomplete="username" autocapitalize="off" spellcheck="false"></div>
+      <div><label for="fPass">كلمة المرور</label><input type="password" id="fPass" dir="ltr" autocomplete="current-password"></div>
       <div class="err" id="loginErr"></div>
       <button class="btn" type="submit">دخول${ic("next")}</button>
     </form></div>`;
@@ -203,7 +203,7 @@ function answer(v){
 }
 function pScaleResult(){
   const st = S(), sc = st.scale, sty = styleOf(st), an = sty==="analytic";
-  return head("brain","نتيجة مقياس الأسلوب المعرفي")+`<div class="card stack">
+  return head("brain","نتيجة مقياس الأساليب المعرفية")+`<div class="card stack">
     <div class="row" style="gap:18px"><div class="big">${ic(an?"steps":"map")}</div>
       <div class="grow"><p class="muted">أسلوبك المعرفي</p><h2 style="font-size:1.9rem;color:var(--v-deep)">الأسلوب ال${SNAME[sty]}</h2>
       <p>${an?"تميل إلى معالجة المعلومات جزءاً بعد جزء: تفحص كل عنصر على حدة ثم تبني الصورة الكاملة.":"تميل إلى معالجة المعلومات كصورة واحدة: ترى الكل وعلاقاته أولاً ثم تنزل إلى التفاصيل."}</p></div></div>
@@ -502,11 +502,12 @@ function pAdmin(){
      <td>${s.scale&&s.scale.done?`<select data-ov="${esc(s.code)}" aria-label="نمط التوجيه"><option value="">${SNAME[s.scale.style||(s.scale.ratio<=DB.cfg.cutoff?"holistic":"analytic")]} (من المقياس)</option><option value="analytic" ${s.override==="analytic"?"selected":""}>تحليلي (يدوي)</option><option value="holistic" ${s.override==="holistic"?"selected":""}>كلي (يدوي)</option></select>`:`<span class="chip">لم يُكمل المقياس</span>`}</td>
      <td class="num">${m&&m.pre?m.pre.score:"-"}</td><td class="num">${m&&m.post?m.post.score:"-"}</td><td class="num">${m?lessonsDone(m)+" / "+NL:"-"}</td><td class="num">${m?m.err:"-"}</td>
      <td><button class="btn ghost sm" data-act="detail" data-code="${esc(s.code)}">الإجابات</button> <button class="btn ghost sm" data-act="delStu" data-code="${esc(s.code)}">${vp.del===s.code?"تأكيد الحذف":"حذف"}</button></td></tr>`; }).join("");
-  return head("chart","لوحة الباحث","نمط التوجيه يتحدد لكل طالب تلقائياً من مقياس الأسلوب المعرفي")+`
+  return head("chart","لوحة الباحث","نمط التوجيه يتحدد لكل طالب تلقائياً من مقياس الأساليب المعرفية")+`
     <div class="row">${ONLINE?`<span class="chip ok">${ic("check")}متصل بقاعدة البيانات · ${esc(FB.adminEmail()||"")}</span><button class="btn ghost sm" data-act="adminRefresh">${ic("refresh")}تحديث البيانات</button>`:`<span class="chip amber">${ic("alert")}وضع محلي: البيانات من هذا الجهاز فقط</span>`}<span class="grow"></span><button class="btn ghost sm" data-act="adminOut">${ic("out")}خروج الأدمن</button></div>
+    ${addCard()}
     ${adminStats(list)}
     <div class="card row"><div style="flex:0 1 280px"><label for="fCut">حد تصنيف الأسلوب (نسبة كلي/تحليلي)</label><input type="number" id="fCut" step="0.01" min="0.1" value="${DB.cfg.cutoff}"></div><p class="muted small grow">النسبة = وسيط زمن الاستجابة في الاختبار الثالث (مطابقة الأشكال) ÷ وسيطه في الاختبار الرابع (الأشكال المتضمنة)، محسوباً على المفردات الصحيحة. النسبة ≤ الحد = كلي، وأكبر منه = تحليلي. يُطبَّق الحد على من يُكمل المقياس بعد تعديله، ونمط من أكمله يبقى ثابتاً إلا إذا غيرته يدوياً من جدول الطلاب.</p></div>
-    <div class="card stack s"><h3>الطلاب (${list.length})</h3><div class="scroll"><table class="t"><thead><tr><th>الكود</th><th>الاسم</th><th>الثالث (درجة · وسيط الزمن)</th><th>الرابع (درجة · وسيط الزمن)</th><th>النسبة</th><th>نمط التوجيه</th><th>قبلي</th><th>بعدي</th><th>الموضوعات</th><th>أخطاء</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="11" class="muted">لا توجد بيانات بعد.</td></tr>`}</tbody></table></div></div>
+    <div class="card stack s"><h3>الطلاب (${list.length})</h3>${ONLINE?`<p class="muted small">الحذف يمسح بيانات الطالب من البيئة. لإعادة استخدام نفس اسم المستخدم، احذف حسابه أيضاً من Firebase Console ← Authentication ← Users.</p>`:""}<div class="scroll"><table class="t"><thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الثالث (درجة · وسيط الزمن)</th><th>الرابع (درجة · وسيط الزمن)</th><th>النسبة</th><th>نمط التوجيه</th><th>قبلي</th><th>بعدي</th><th>الموضوعات</th><th>أخطاء</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="11" class="muted">لا توجد بيانات بعد.</td></tr>`}</tbody></table></div></div>
     <div class="g2"><div class="card stack s"><h3>تصدير النتائج (CSV)</h3><textarea class="mono" id="csv1" readonly>${esc(csvSummary())}</textarea><div class="row"><button class="btn sm" data-act="copy" data-t="csv1">نسخ</button><span class="muted small" id="m-csv1"></span></div></div>
       <div class="card stack s"><h3>تصدير الإجابات المكتوبة (CSV)</h3><textarea class="mono" id="csv2" readonly>${esc(csvAnswers())}</textarea><div class="row"><button class="btn sm" data-act="copy" data-t="csv2">نسخ</button><span class="muted small" id="m-csv2"></span></div></div></div>`;
 }
@@ -533,8 +534,11 @@ document.addEventListener("click", ev=>{
   const a = ev.target.closest("[data-act]"); if(!a || a.disabled) return;
   const d = a.dataset, m = S() ? M() : null;
   switch(d.act){
-    case "logout": setMe(null); goto(U.home); break;
-    case "logoutHere": setMe(null); location.reload(); break;
+    case "logout": (ONLINE ? FB.logout() : Promise.resolve()).catch(()=>{}).then(()=>{ setMe(null); goto(U.home); }); break;
+    case "logoutHere": (ONLINE ? FB.logout() : Promise.resolve()).catch(()=>{}).then(()=>{ setMe(null); location.reload(); }); break;
+    case "genPass": { const f = document.getElementById("aPass"); if(f) f.value = genPass(); break; }
+    case "addBulk": { const box = document.getElementById("fBulk"); vp.bulk = box ? box.value : ""; addBulk(); break; }
+    case "clearAdded": ADDED = []; render(); break;
     case "startSub": run = {sub:d.sub, i:0, ans:[], rt:[], t0:performance.now(), last:performance.now()}; render(); toTop(); break;
     case "ans": answer(d.v==="1"); break;
     case "tq": TT[d.kind][+d.q] = +d.o; vp.err = ""; render(); break;
@@ -572,17 +576,17 @@ document.addEventListener("change", ev=>{
 document.addEventListener("submit", ev=>{
   ev.preventDefault();
   if(ev.target.id==="loginForm"){
-    const name = document.getElementById("fName").value.trim().replace(/\s+/g," "), code = document.getElementById("fCode").value.trim(), er = document.getElementById("loginErr");
-    if(name.split(" ").length < 2){ er.textContent = "اكتب اسمك كاملاً."; return; }
-    if(!code){ er.textContent = "اكتب كود الطالب."; return; }
-    if(!/^[0-9A-Za-z\u0660-\u0669_-]{1,30}$/.test(code)){ er.textContent = "الكود يتكون من أرقام أو حروف إنجليزية فقط."; return; }
-    if(ONLINE){ studentLogin(name, code, er, ev.target.querySelector("button")); return; }
-    const ex = DB.students[code];
-    if(ex && ex.name !== name){ er.textContent = "هذا الكود مسجل باسم آخر. راجع الكود أو الاسم."; return; }
-    if(!ex) DB.students[code] = {name, code, created:new Date().toISOString()};
-    setMe(code); save(); goto(scaleDone(S()) ? U.modules : U.scale);
+    const u = document.getElementById("fUser").value.trim().toLowerCase(), pw = document.getElementById("fPass").value, er = document.getElementById("loginErr");
+    if(!u || !pw){ er.textContent = "اكتب اسم المستخدم وكلمة المرور."; return; }
+    if(ONLINE){ studentLogin(u, pw, er, ev.target.querySelector("button")); return; }
+    const ex = DB.students[u];
+    if(!ex || ex.pass !== pw){ er.textContent = "اسم المستخدم أو كلمة المرور غير صحيحة."; return; }
+    setMe(u); save(); goto(scaleDone(S()) ? U.modules : U.scale);
   }
   if(ev.target.id==="pinForm" && ONLINE){ adminLogin(ev.target); return; }
+  if(ev.target.id==="addForm"){ const n = document.getElementById("aName").value, u = document.getElementById("aUser").value, pw = document.getElementById("aPass").value;
+    vp.busy = true; vp.addErr = ""; render();
+    addStudent(n, u, pw).then(r=>{ vp.busy = false; if(!r.ok) vp.addErr = r.msg; render(); if(r.ok){ const f = document.getElementById("aName"); if(f) f.focus(); } }); return; }
   if(ev.target.id==="pinForm"){ if(document.getElementById("fPin").value === CONFIG.pin){ adminOk = true; try{ sessionStorage.setItem(LS+"-admin","1"); }catch(e){} render(); } else document.getElementById("pinErr").textContent = "الرقم السري غير صحيح."; }
 });
 window.addEventListener("beforeunload", ()=>{ try{ localStorage.setItem(LS, JSON.stringify(DB)); }catch(e){} if(ONLINE && me) push(); });
@@ -605,24 +609,67 @@ async function adminLogin(form){
 }
 
 /* ---- تسجيل دخول الطالب على قاعدة البيانات ---- */
-async function studentLogin(name, code, er, btn){
+async function studentLogin(u, pw, er, btn){
   btn.disabled = true; er.textContent = "";
-  try{
-    await FB.ensureStudentAuth();
-    let state, remote = null;
-    try{ remote = await FB.getStudent(code); state = remote ? "own" : "none"; }
-    catch(e){ if(e && e.code==="permission-denied") state = "other"; else throw e; }
-    if(state==="own" && remote.name !== name){ er.textContent = "هذا الكود مسجل باسم آخر. راجع الكود أو الاسم."; btn.disabled = false; return; }
-    if(state==="none"){ remote = {name, code, uid:FB.uid(), created:new Date().toISOString()}; await FB.createStudent(code, remote); }
-    if(state==="other"){
-      try{ await FB.claimStudent(code, name); remote = await FB.getStudent(code); }
-      catch(e){ er.textContent = "هذا الكود مسجل باسم آخر. اكتب اسمك كما سجلته أول مرة."; btn.disabled = false; return; }
-    }
-    DB.students[code] = remote; setMe(code); save();
-    goto(scaleDone(remote) ? U.modules : U.scale);
-  }catch(e){
-    console.warn(e); er.textContent = "تعذر الاتصال بقاعدة البيانات. تأكد من الإنترنت وأعد المحاولة."; btn.disabled = false;
+  try{ await FB.studentLogin(u, pw); }
+  catch(e){ btn.disabled = false; const c = (e && e.code) || "";
+    er.textContent = /network/.test(c) ? "تعذر الاتصال. تأكد من الإنترنت وأعد المحاولة." : (/too-many/.test(c) ? "محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة." : "اسم المستخدم أو كلمة المرور غير صحيحة."); return; }
+  let remote = null;
+  try{ remote = await FB.getStudent(u); }catch(e){ console.warn(e); }
+  if(!remote){ await FB.logout(); btn.disabled = false; er.textContent = "حسابك غير مفعّل في البيئة. راجع القائم على التجربة."; return; }
+  DB.students[u] = remote; setMe(u); save();
+  goto(scaleDone(remote) ? U.modules : U.scale);
+}
+
+/* ---- إضافة الطلاب (الأدمن) ---- */
+const USER_RE = /^[a-z0-9._-]{3,30}$/;
+function genPass(){ const a = new Uint32Array(1); (crypto||window.crypto).getRandomValues(a); return String(100000 + a[0] % 900000); }
+let ADDED = [];   // آخر حسابات أُضيفت في هذه الجلسة (كلمات المرور لا تُحفظ في قاعدة البيانات)
+function addMsg(code){ return ({"auth/email-already-in-use":"اسم المستخدم مستخدم من قبل","auth/weak-password":"كلمة المرور أقل من 6 أحرف","auth/invalid-email":"اسم المستخدم غير صالح","auth/too-many-requests":"محاولات كثيرة، أعد المحاولة بعد قليل","auth/network-request-failed":"تعذر الاتصال","permission-denied":"ليست لديك صلاحية الأدمن"})[code] || "تعذر الإضافة"; }
+async function addStudent(name, u, pw){
+  name = (name||"").trim().replace(/\s+/g," "); u = (u||"").trim().toLowerCase(); pw = (pw||"").trim() || genPass();
+  const row = {name, user:u, pass:pw, ok:false, msg:""};
+  if(name.split(" ").length < 2) row.msg = "اكتب الاسم كاملاً";
+  else if(!USER_RE.test(u)) row.msg = "اسم المستخدم: حروف إنجليزية صغيرة وأرقام فقط (3 أحرف على الأقل)";
+  else if(pw.length < 6) row.msg = "كلمة المرور 6 أحرف على الأقل";
+  else if(DB.students[u]) row.msg = "اسم المستخدم مستخدم من قبل";
+  else if(ONLINE){ try{ DB.students[u] = await FB.createStudentAccount(name, u, pw); row.ok = true; }catch(e){ console.warn(e); row.msg = addMsg(e && e.code); } }
+  else { DB.students[u] = {name, code:u, pass:pw, created:new Date().toISOString()}; row.ok = true; }
+  ADDED.unshift(row); try{ localStorage.setItem(LS, JSON.stringify(DB)); }catch(e){}
+  return row;
+}
+async function addBulk(){
+  const box = document.getElementById("fBulk"), lines = box.value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ vp.addErr = "الصق قائمة الطلاب أولاً."; render(); return; }
+  vp.busy = true; vp.addErr = "";
+  for(let k=0; k<lines.length; k++){
+    const p = lines[k].split(/[,،\t;]+/).map(x=>x.trim());
+    vp.prog = `جارٍ الإضافة ${k+1} من ${lines.length}…`; render();
+    await addStudent(p[0], p[1], p[2]);
   }
+  vp.busy = false; vp.prog = ""; vp.bulk = ""; render();
+}
+function addCard(){
+  const okRows = ADDED.filter(r=>r.ok), list = okRows.map(r=>`${r.name}\t${r.user}\t${r.pass}`).join("\n");
+  return `<div class="card stack s"><h3>${ic("user")} إضافة الطلاب</h3>
+    <div class="g2" style="align-items:start">
+      <form id="addForm" class="stack s" novalidate><b class="small">طالب واحد</b>
+        <div><label for="aName">الاسم الرباعي</label><input type="text" id="aName" autocomplete="off"></div>
+        <div class="g2" style="gap:10px"><div><label for="aUser">اسم المستخدم</label><input type="text" id="aUser" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="s101"></div>
+          <div><label for="aPass">كلمة المرور</label><div class="row" style="gap:6px;flex-wrap:nowrap"><input type="text" id="aPass" dir="ltr" autocomplete="off" placeholder="6 أحرف على الأقل"><button class="btn ghost sm" type="button" data-act="genPass" title="توليد كلمة مرور">${ic("refresh")}</button></div></div></div>
+        <div><button class="btn" type="submit" ${vp.busy?"disabled":""}>${ic("check")}إضافة الطالب</button></div></form>
+      <div class="stack s"><b class="small">قائمة طلاب مرة واحدة</b>
+        <label for="fBulk" class="muted small" style="font-weight:500">كل سطر: الاسم، اسم المستخدم، كلمة المرور. لو تركت كلمة المرور فارغة تتولد تلقائياً. تقدر تنسخ الأعمدة الثلاثة من Excel وتلصقها مباشرة.</label>
+        <textarea id="fBulk" class="mono" style="direction:rtl" placeholder="أحمد محمد علي حسن، s101، 123987&#10;منى سامي أحمد محمود، s102">${esc(vp.bulk||"")}</textarea>
+        <div class="row"><button class="btn" data-act="addBulk" ${vp.busy?"disabled":""}>${ic("list")}إضافة القائمة</button><span class="muted small">${vp.prog||""}</span></div></div>
+    </div>
+    <div class="err">${vp.addErr||""}</div>
+    ${ADDED.length?`<div class="stack s"><div class="fb hint">${ic("alert")}<span>احفظ كلمات المرور دي الآن (انسخها في Excel أو اطبعها للطلاب)؛ لأسباب أمنية لا تُحفظ في قاعدة البيانات ولن تظهر مرة أخرى.</span></div>
+      <div class="scroll"><table class="t"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>كلمة المرور</th><th>الحالة</th></tr></thead><tbody>
+      ${ADDED.map(r=>`<tr><td>${esc(r.name)}</td><td dir="ltr">${esc(r.user)}</td><td dir="ltr" class="num">${r.ok?esc(r.pass):"-"}</td><td>${r.ok?`<span class="chip ok">${ic("check")}تمت الإضافة</span>`:`<span class="chip bad">${esc(r.msg)}</span>`}</td></tr>`).join("")}</tbody></table></div>
+      <textarea id="addedList" class="mono" readonly style="position:absolute;left:-9999px;height:1px">${esc("الاسم\tاسم المستخدم\tكلمة المرور\n"+list)}</textarea>
+      <div class="row"><button class="btn sm" data-act="copy" data-t="addedList">نسخ الحسابات المضافة (للصق في Excel)</button><span class="muted small" id="m-addedList"></span><span class="grow"></span><button class="btn ghost sm" data-act="clearAdded">مسح القائمة</button></div></div>`:""}
+  </div>`;
 }
 
 /* ================= التشغيل ================= */
@@ -643,14 +690,15 @@ async function boot(){
       if(PAGE==="admin" && fb.isAdminUser()){ await loadAdmin(); adminOk = true; }
       else if(PAGE==="admin"){ adminOk = false; }
       else {
-        await fb.ensureAnon();
-        const st = await fb.getSettings().catch(()=>null); if(st && st.cutoff) DB.cfg.cutoff = st.cutoff;
-        if(me){
-          // البيانات على الخادم هي المرجع؛ النسخة المحلية للطوارئ فقط
-          let remote = null; try{ remote = await fb.getStudent(me); }catch(e){ if(e && e.code==="permission-denied") remote = false; }
-          if(remote) DB.students[me] = remote;
-          else if(remote===false || fb.isAdminUser()) setMe(null);
-        }
+        const su = fb.studentUser();
+        if(su){
+          if(me !== su) setMe(su);
+          const st = await fb.getSettings().catch(()=>null); if(st && st.cutoff) DB.cfg.cutoff = st.cutoff;
+          // البيانات على الخادم هي المرجع؛ النسخة المحلية للطوارئ فقط (لو انقطع الإنترنت)
+          let remote = null; try{ remote = await fb.getStudent(su); }catch(e){ remote = (e && e.code==="permission-denied") ? false : null; }
+          if(remote) DB.students[su] = remote;
+          else if(remote===false || !DB.students[su]) setMe(null);
+        } else if(me) setMe(null);
       }
     }catch(e){ console.warn("boot sync failed, using local copy", e); }
   }

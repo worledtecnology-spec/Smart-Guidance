@@ -8,18 +8,14 @@ service cloud.firestore {
     function isAdmin() { return signedIn() && request.auth.token.email in ['drmona@gmail.com']; }
 
     match /students/{code} {
-      // الطالب يقرأ بياناته فقط، والأدمن يقرأ الكل
-      allow get: if isAdmin() || (signedIn() && (resource == null || resource.data.uid == request.auth.uid));
-      allow list, delete: if isAdmin();
-      // تسجيل طالب جديد
-      allow create: if isAdmin() || (signedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.code == code
-        && request.resource.data.name is string && request.resource.data.name.size() > 3
-        && !('override' in request.resource.data));
-      // الحفظ: نفس الاسم والكود، لا يغير الطالب نمطه يدوياً، ولا يعيد المقياس بعد إتمامه
+      // الطالب يقرأ ملفه فقط، والأدمن يقرأ الكل
+      allow get: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      // الأدمن وحده يضيف الطلاب ويعرض القائمة ويحذف
+      allow list, create, delete: if isAdmin();
+      // الحفظ: الطالب يعدّل ملفه فقط، دون تغيير اسمه أو حسابه أو نمطه، ولا يعيد المقياس بعد إتمامه
       allow update: if isAdmin() || (signedIn()
-        && request.resource.data.uid == request.auth.uid
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
         && request.resource.data.name == resource.data.name
         && request.resource.data.code == resource.data.code
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['override'])

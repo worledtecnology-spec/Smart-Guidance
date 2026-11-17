@@ -1,7 +1,7 @@
 /* ================= الاتصال بـ Firebase (Auth + Firestore) ================= */
 // يعتمد على FIREBASE_CONFIG في config.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 try {
@@ -13,21 +13,30 @@ try {
   catch (e) { db = initializeFirestore(app, {}); }
   const authReady = new Promise(res => { const off = onAuthStateChanged(auth, u => { off(); res(u); }); });
   const S = code => doc(db, "students", code);
+  // حسابات الطلاب: اسم المستخدم يتحول إلى بريد داخلي ثابت (لا يُرسل إليه شيء)
+  const DOMAIN = STUDENT_EMAIL_DOMAIN, toEmail = u => `${u}@${DOMAIN}`, isStudentEmail = e => !!e && e.endsWith("@" + DOMAIN);
+  let creator = null; // تطبيق ثانوي لإنشاء حسابات الطلاب دون إخراج الأدمن
 
   window.FB = {
-    // حساب مجهول للطالب (لا يُخرج الأدمن إن كان مسجلاً)
-    async ensureAnon() { await authReady; if (!auth.currentUser) await signInAnonymously(auth); return auth.currentUser.uid; },
-    // قبل تسجيل دخول طالب: يُخرج حساب الأدمن إن وُجد
-    async ensureStudentAuth() { await authReady; if (auth.currentUser && !auth.currentUser.isAnonymous) await signOut(auth); if (!auth.currentUser) await signInAnonymously(auth); return auth.currentUser.uid; },
+    // الطالب الحالي (اسم المستخدم) إن كان المسجل طالباً
+    studentUser: () => auth.currentUser && isStudentEmail(auth.currentUser.email) ? auth.currentUser.email.split("@")[0] : "",
+    async studentLogin(u, pw) { await authReady; if (auth.currentUser) await signOut(auth); await signInWithEmailAndPassword(auth, toEmail(u), pw); return auth.currentUser.uid; },
+    // الأدمن ينشئ حساب طالب (Authentication) ثم ملفه (Firestore)
+    async createStudentAccount(name, u, pw) {
+      if (!creator) creator = getAuth(initializeApp(FIREBASE_CONFIG, "student-creator"));
+      const cred = await createUserWithEmailAndPassword(creator, toEmail(u), pw);
+      const data = { name, code: u, uid: cred.user.uid, created: new Date().toISOString() };
+      await signOut(creator);
+      await setDoc(S(u), data);
+      return data;
+    },
     uid: () => auth.currentUser ? auth.currentUser.uid : "",
-    isAdminUser: () => !!(auth.currentUser && !auth.currentUser.isAnonymous),
+    isAdminUser: () => !!(auth.currentUser && auth.currentUser.email && !isStudentEmail(auth.currentUser.email)),
     adminEmail: () => auth.currentUser ? auth.currentUser.email : "",
     async ready() { await authReady; },
     async adminLogin(email, pw) { await authReady; await signInWithEmailAndPassword(auth, email, pw); },
     async logout() { await signOut(auth); },
     async getStudent(code) { const s = await getDoc(S(code)); return s.exists() ? s.data() : null; },
-    async createStudent(code, data) { await setDoc(S(code), data); },
-    async claimStudent(code, name) { await updateDoc(S(code), { uid: auth.currentUser.uid, name, code }); },
     async saveStudent(code, data) { await setDoc(S(code), data, { merge: true }); },
     async setOverride(code, v) { await updateDoc(S(code), { override: v ? v : deleteField() }); },
     async deleteStudent(code) { await deleteDoc(S(code)); },
