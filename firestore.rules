@@ -1,0 +1,34 @@
+rules_version = '2';
+// قواعد أمان قاعدة بيانات بيئة التوجيه الذكي
+// انسخ هذا الملف كاملاً في: Firestore Database ← Rules ← Publish
+// إيميل الأدمن: drmona@gmail.com (لإضافة أدمن آخر: ['drmona@gmail.com', 'other@gmail.com'])
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.email in ['drmona@gmail.com']; }
+
+    match /students/{code} {
+      // الطالب يقرأ بياناته فقط، والأدمن يقرأ الكل
+      allow get: if isAdmin() || (signedIn() && (resource == null || resource.data.uid == request.auth.uid));
+      allow list, delete: if isAdmin();
+      // تسجيل طالب جديد
+      allow create: if isAdmin() || (signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.code == code
+        && request.resource.data.name is string && request.resource.data.name.size() > 3
+        && !('override' in request.resource.data));
+      // الحفظ: نفس الاسم والكود، لا يغير الطالب نمطه يدوياً، ولا يعيد المقياس بعد إتمامه
+      allow update: if isAdmin() || (signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.code == resource.data.code
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['override'])
+        && (!resource.data.get('scale', {}).get('done', false) || request.resource.data.scale == resource.data.scale));
+    }
+
+    match /settings/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
