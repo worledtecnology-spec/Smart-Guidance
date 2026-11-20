@@ -58,7 +58,7 @@ const helpCounts = m => { const v = Object.values(m.need||{}); return [1,2,3].ma
 const U = {home:"index.html", instructions:"instructions.html", login:"login.html", scale:"scale.html", scaleResult:"scale-result.html",
   modules:"modules.html", module:"module1.html", goals:"module1-goals.html", lessons:"module1-lessons.html",
   pretest:"pretest.html", preResult:"pretest-result.html", posttest:"posttest.html", postResult:"posttest-result.html",
-  summary:"summary.html", admin:"admin.html"};
+  summary:"summary.html", admin:"admin.html", skills:"skills.html", ar:"ar-ram.html", card:"ar-card.html"};
 const LU = (i,p="c") => "lesson"+(i+1)+(p==="a"?"-activity":(p==="s"?"-self":""))+".html";
 const VT = "onpageswap" in window;
 async function goto(url){
@@ -72,16 +72,17 @@ window.addEventListener("pageshow", e=>{ document.body.classList.remove("leaving
 
 function gate(){
   const st = S();
-  const login = ["scale","scaleResult","modules","module","goals","lessons","pretest","preResult","posttest","postResult","lesson","activity","self","summary"];
-  if(login.includes(PAGE) && !st) return U.login;
+  const login = ["card","skills","ar","scale","scaleResult","modules","module","goals","lessons","pretest","preResult","posttest","postResult","lesson","activity","self","summary"];
+  if(login.includes(PAGE) && !st){ try{ sessionStorage.setItem("sg-next", location.href.split("/").pop()); }catch(e){} return U.login; }
   if(!st) return null;
   const sd = scaleDone(st);
   if(PAGE==="scale" && sd) return U.scaleResult;
   if(PAGE==="scaleResult" && !sd) return U.scale;
-  const mod = ["modules","module","goals","lessons","pretest","preResult","posttest","postResult","lesson","activity","self"];
+  const mod = ["card","skills","ar","modules","module","goals","lessons","pretest","preResult","posttest","postResult","lesson","activity","self"];
   if(mod.includes(PAGE) && !sd) return U.scale;
   if(!mod.includes(PAGE)) return null;
   const m = M();
+  if(PAGE==="skills" || PAGE==="ar" || PAGE==="card") return null;
   if(PAGE==="pretest" && m.pre) return U.preResult;
   if(PAGE==="preResult" && !m.pre) return U.pretest;
   if(["lessons","lesson","activity","self","posttest","postResult"].includes(PAGE) && !m.pre) return U.pretest;
@@ -221,7 +222,9 @@ function pScaleResult(){
 function pModules(){
   return head("layers","الموديولات التعليمية","اختر الموديول الذي تريد دراسته.")+`
     <a class="modcard" href="${U.module}"><div class="side">${ic("wrench")}<b>1</b></div>
-      <div class="main"><span class="chip v">${MOD.no}</span><h2>${MOD.title}</h2><p class="muted">${NL} موضوعات تعليمية</p><span class="btn">ادخل الموديول${ic("next")}</span></div></a>`;
+      <div class="main"><span class="chip v">${MOD.no}</span><h2>${MOD.title}</h2><p class="muted">${NL} موضوعات تعليمية</p><span class="btn">ادخل الموديول${ic("next")}</span></div></a>
+    <a class="modcard ar-card" href="${U.skills}"><div class="side">${ic("scan")}<b>AR</b></div>
+      <div class="main"><span class="chip amber">${ic("phone")}واقع معزز</span><h2>المهارات العملية بالواقع المعزز</h2><p class="muted">نفّذ مهارات الصيانة على جهاز حقيقي بتوجيه ثلاثي الأبعاد من كاميرا الهاتف.</p><span class="btn">ادخل المهارات${ic("next")}</span></div></a>`;
 }
 function pModule(){
   return head("wrench",MOD.no,MOD.title)+`<div class="card stack s"><h2 class="sec"><span class="si">${ic("book")}</span>عزيزي الطالب.. عزيزتي الطالبة</h2><p class="intro">${MOD.intro}</p></div>`
@@ -266,25 +269,70 @@ function pTestResult(kind){
     + pager(null, kind==="pre" ? {href:U.lessons, t:"موضوعات الموديول"} : {href:U.summary, t:"ملخص الأداء"});
 }
 
+/* ================= العناصر المعززة: علامة QR لكل فقرة في المحتوى والأنشطة ================= */
+// مفتاح العنصر: c{موضوع}-{كتلة}[-{بند}] للمحتوى ، a{موضوع}-goal|task|g{خطوة} للنشاط
+function elements(i){
+  const l = MOD.lessons[i], out = [], add = (k,title,lines,icon,sec) => out.push({k, i, title, lines:[].concat(lines).filter(Boolean), icon:icon||"book", sec});
+  l.blocks.forEach((b,bi)=>{ const K = `c${i}-${bi}`;
+    if(b.def) add(K, "تعريف", b.def, "book", "c");
+    else if(b.p) add(K, "فقرة", b.p, "book", "c");
+    else if(b.note) add(K, "ملاحظة مهمة", b.note, "bulb", "c");
+    else if(b.list) b.list.forEach((x,ii)=>add(`${K}-${ii}`, b.h, x[1], x[0], "c"));
+    else if(b.cards) b.cards.forEach((x,ii)=>add(`${K}-${ii}`, x[1], x[2], x[0], "c"));
+    else if(b.types) b.types.forEach((t,ii)=>add(`${K}-${ii}`, t.name, [t.def].concat(t.ex), t.icon, "c"));
+    else if(b.comp) b.comp.forEach((c,ii)=>add(`${K}-${ii}`, `${c[1]} (${c[2]})`, ["الوظيفة: "+c[3], "ما يُفحص أثناء الصيانة: "+c[4]], c[0], "c"));
+    else if(b.rules) b.rules.forEach((r,ii)=>add(`${K}-${ii}`, `قاعدة السلامة ${ii+1}`, r[1], r[0], "c"));
+    else if(b.steps) b.steps.forEach((x,ii)=>add(`${K}-${ii}`, `الخطوة ${ii+1}: ${x.t}`, x.items, x.icon, "c"));
+  });
+  const a = l.act;
+  add(`a${i}-goal`, "الهدف من النشاط", a.goal, "target", "a");
+  add(`a${i}-task`, "المهمة المطلوب تنفيذها", a.task, "alert", "a");
+  (A ? a.A : a.H).forEach((x,n)=>add(`a${i}-g${n}`, A ? `خطوة التوجيه ${n+1}` : "جانب من الصورة الكلية", x, A ? "steps" : "link", "a"));
+  return out;
+}
+function elementByKey(k){ const m = /^([ca])(\d+)-/.exec(k||""); if(!m || !MOD.lessons[+m[2]]) return null; return elements(+m[2]).find(e=>e.k===k) || null; }
+// العنصر المادي المرتبط بالفقرة (لإظهاره على النموذج ثلاثي الأبعاد)
+function partOf(el){ const t = el.title + " " + el.lines.join(" ");
+  const R = [["ram",/ذاكرة|RAM/],["cpu",/معالج|CPU/],["fan",/مروح|مراوح|تبريد|حرار/],["sto",/تخزين|القرص|SMART|نسخ احتياطي|البيانات والبرامج/],["psu",/مزود الطاقة|الطاقة الكهربائية|مصدر الكهرباء|الجهد|PSU/],["plug",/كابل|توصيل|منافذ/],["mb",/اللوحة الأم|Motherboard|الدوائر/]];
+  for(const [p,re] of R) if(re.test(el.title)) return p; for(const [p,re] of R) if(re.test(t)) return p; return null; }
+const QRC = new Map();
+function qrc(text, cell){ const key = text+"|"+(cell||3); if(QRC.has(key)) return QRC.get(key); let u; try{ const q = qrcode(0, "M"); q.addData(text); q.make(); u = q.createDataURL(cell||3, 2); }catch(e){ u = ""; } QRC.set(key,u); return u; }
+const cardURL = k => /^https?:/.test(location.protocol) ? `${baseDir()}${U.card}?k=${k}` : k;
+const seenEl = k => { const st = S(); return !!(st && st.m && st.m.arc && st.m.arc[k]); };
+const mk = k => typeof qrcode==="function" ? `<button class="mk ${seenEl(k)?"seen":""}" data-act="mk" data-k="${k}" title="امسح بهاتفك لترى هذا العنصر بالواقع المعزز" aria-label="علامة الواقع المعزز لهذا العنصر"><img src="${qrc(cardURL(k))}" alt=""></button>` : "";
+function showMk(k){
+  const el = elementByKey(k); if(!el) return;
+  let d = document.getElementById("mkModal"); if(d) d.remove();
+  d = document.createElement("div"); d.id = "mkModal"; d.setAttribute("role","dialog"); d.setAttribute("aria-modal","true");
+  d.innerHTML = `<div class="mkbox"><button class="mkx" data-act="mkClose" aria-label="إغلاق">${ic("x")}</button>
+    <span class="chip amber">${ic("scan")}عنصر معزز</span><h3>${esc(el.title)}</h3>
+    <img src="${qrc(cardURL(k), 7)}" alt="رمز QR للعنصر">
+    <p class="muted small">وجّه كاميرا هاتفك إلى الرمز لترى هذا العنصر بالواقع المعزز على الهاتف.</p>
+    <div class="row" style="justify-content:center"><a class="btn" href="${U.card}?k=${k}">${ic("eye")}اعرضه هنا</a><button class="btn ghost" data-act="mkClose">إغلاق</button></div></div>`;
+  document.body.appendChild(d); d.querySelector(".mkx").focus();
+}
+const arcRec = (k, via) => { const m = M(); m.arc = m.arc || {}; const r = m.arc[k] || (m.arc[k] = {n:0, first:Date.now()}); r.n++; r.last = Date.now(); if(via) r[via] = (r[via]||0) + 1; save(); };
+
+const arHint = () => typeof qrcode==="function" ? `<div class="arhint">${ic("scan")}<span>بجوار كل فقرة علامة QR: امسحها بكاميرا هاتفك لترى العنصر بالواقع المعزز، أو اضغط عليها هنا.</span></div>` : "";
 /* ================= صفحة المحتوى ================= */
 function blocks(l){
-  const tone = {ok:"var(--ok)", bad:"var(--bad)", info:"var(--info)"};
-  return l.blocks.map(b=>{
-    if(b.def) return `<div class="def">${ic("book")}<div>${b.def}</div></div>`;
-    if(b.p) return `<p style="font-size:1.06rem">${b.p}</p>`;
-    if(b.note) return `<div class="note">${ic("bulb")}<span>${b.note}</span></div>`;
-    if(b.list) return `<h3 class="sec"><span class="si">${ic("list")}</span>${b.h}</h3><div class="ilist">${b.list.map(x=>`<div class="il"><div class="ii">${ic(x[0])}</div><span>${x[1]}</span></div>`).join("")}</div>`;
-    if(b.cards) return `<h3 class="sec"><span class="si">${ic("list")}</span>${b.h}</h3><div class="g3">${b.cards.map((x,k)=>`<div class="tile"><span class="stepno">${k+1}</span><div class="ti">${ic(x[0])}</div><h3>${x[1]}</h3><p class="muted">${x[2]}</p></div>`).join("")}</div>`;
-    if(b.types) return `<div class="types">${b.types.map(t=>`<div class="ty" style="--tc:${tone[t.tone]}"><div class="hd">${ic(t.icon)}<div><b>${t.name}</b><span dir="auto">${t.en}</span></div></div><div class="bd">${t.def?`<p>${t.def}</p>`:""}${t.ex.length?`<ul>${t.ex.map(e=>`<li>${ic("check")}<span>${e}</span></li>`).join("")}</ul>`:""}</div></div>`).join("")}</div>`;
-    if(b.comp) return `<div class="comp">${b.comp.map(c=>`<div class="cp"><div class="ci">${ic(c[0])}</div><h4>${c[1]}<span dir="ltr">${c[2]}</span></h4><dl><div><dt>الوظيفة</dt><dd>${c[3]}</dd></div><div><dt>ما يُفحص أثناء الصيانة</dt><dd>${c[4]}</dd></div></dl></div>`).join("")}</div>`;
-    if(b.rules) return `<div class="rules">${b.rules.map((r,k)=>`<div class="rule"><div class="rn">${ic(r[0])}<i>${k+1}</i></div><span>${r[1]}</span></div>`).join("")}</div>`;
-    if(b.steps) return `<h3 class="sec"><span class="si">${ic("steps")}</span>${b.h}</h3><div class="tl">${b.steps.map((s,k)=>`<div class="st"><div class="ln"><b>${ic(s.icon)}</b></div><div class="bx"><h4><small>الخطوة ${k+1}:</small> ${s.t}</h4><ul>${s.items.map(x=>`<li>${x}</li>`).join("")}</ul></div></div>`).join("")}</div>`;
+  const tone = {ok:"var(--ok)", bad:"var(--bad)", info:"var(--info)"}, i = MOD.lessons.indexOf(l);
+  return l.blocks.map((b,bi)=>{ const K = `c${i}-${bi}`;
+    if(b.def) return `<div class="def hasmk">${ic("book")}<div>${b.def}</div>${mk(K)}</div>`;
+    if(b.p) return `<div class="para hasmk"><p>${b.p}</p>${mk(K)}</div>`;
+    if(b.note) return `<div class="note hasmk">${ic("bulb")}<span>${b.note}</span>${mk(K)}</div>`;
+    if(b.list) return `<h3 class="sec"><span class="si">${ic("list")}</span>${b.h}</h3><div class="ilist">${b.list.map((x,ii)=>`<div class="il hasmk"><div class="ii">${ic(x[0])}</div><span>${x[1]}</span>${mk(`${K}-${ii}`)}</div>`).join("")}</div>`;
+    if(b.cards) return `<h3 class="sec"><span class="si">${ic("list")}</span>${b.h}</h3><div class="g3">${b.cards.map((x,ii)=>`<div class="tile hasmk"><span class="stepno">${ii+1}</span><div class="ti">${ic(x[0])}</div><h3>${x[1]}</h3><p class="muted">${x[2]}</p>${mk(`${K}-${ii}`)}</div>`).join("")}</div>`;
+    if(b.types) return `<div class="types">${b.types.map((t,ii)=>`<div class="ty" style="--tc:${tone[t.tone]}"><div class="hd">${ic(t.icon)}<div><b>${t.name}</b><span dir="auto">${t.en}</span></div></div><div class="bd hasmk">${t.def?`<p>${t.def}</p>`:""}${t.ex.length?`<ul>${t.ex.map(e=>`<li>${ic("check")}<span>${e}</span></li>`).join("")}</ul>`:""}${mk(`${K}-${ii}`)}</div></div>`).join("")}</div>`;
+    if(b.comp) return `<div class="comp">${b.comp.map((c,ii)=>`<div class="cp hasmk"><div class="ci">${ic(c[0])}</div><h4>${c[1]}<span dir="ltr">${c[2]}</span></h4><dl><div><dt>الوظيفة</dt><dd>${c[3]}</dd></div><div><dt>ما يُفحص أثناء الصيانة</dt><dd>${c[4]}</dd></div></dl>${mk(`${K}-${ii}`)}</div>`).join("")}</div>`;
+    if(b.rules) return `<div class="rules">${b.rules.map((r,ii)=>`<div class="rule hasmk"><div class="rn">${ic(r[0])}<i>${ii+1}</i></div><span>${r[1]}</span>${mk(`${K}-${ii}`)}</div>`).join("")}</div>`;
+    if(b.steps) return `<h3 class="sec"><span class="si">${ic("steps")}</span>${b.h}</h3><div class="tl">${b.steps.map((x,ii)=>`<div class="st"><div class="ln"><b>${ic(x.icon)}</b></div><div class="bx hasmk"><h4><small>الخطوة ${ii+1}:</small> ${x.t}</h4><ul>${x.items.map(y=>`<li>${y}</li>`).join("")}</ul>${mk(`${K}-${ii}`)}</div></div>`).join("")}</div>`;
     return "";
   }).join("");
 }
 function pLesson(){
   const l = MOD.lessons[PI];
-  return head(l.icon,l.t,`الموضوع ${PI+1} من ${NL}`)+blocks(l)
+  return head(l.icon,l.t,`الموضوع ${PI+1} من ${NL}`)+arHint()+blocks(l)
     + pager({href:U.lessons, t:"موضوعات الموديول"}, {act:"doneContent", t:"النشاط التعليمي"});
 }
 
@@ -296,15 +344,15 @@ function field(key,c){
 }
 function pActivity(){
   const m = M(), i = PI, l = MOD.lessons[i], a = l.act, pr = a.prod, K = "L"+i, done = !!m.f[K+".a"];
-  const brief = `<div class="brief"><div class="b goal-b">${ic("target")}<div><b>الهدف من النشاط</b>${a.goal}</div></div>
+  const brief = arHint()+`<div class="brief"><div class="b goal-b hasmk">${ic("target")}<div><b>الهدف من النشاط</b>${a.goal}</div>${mk(K.replace("L","a")+"-goal")}</div>
      <div class="b lvl-b">${ic(a.lab?"wrench":"pen")}<div><b>${a.lab?"نشاط عملي يُنفذ في المعمل":"نشاط تحليل وتطبيق"}</b>مستوى الإرشاد الحالي: ${HELP[(m.need||{})[K+".a"]||0]}</div></div>
-     <div class="b task-b">${ic("alert")}<div><b>المهمة المطلوب تنفيذها</b>${a.task}</div></div></div>`;
-  const strip = `<div class="strip">${a.A.map((s,k)=>`<div><b>${k+1}</b><span>${s}</span></div>`).join("")}</div>`;
+     <div class="b task-b hasmk">${ic("alert")}<div><b>المهمة المطلوب تنفيذها</b>${a.task}</div>${mk(K.replace("L","a")+"-task")}</div></div>`;
+  const strip = `<div class="strip">${a.A.map((s,k)=>`<div class="hasmk"><b>${k+1}</b><span>${s}</span>${mk(`a${i}-g${k}`)}</div>`).join("")}</div>`;
   let guide, product = "";
   if(A){
     if(pr.type==="text"){
       const k = Math.min(m.p[K]||0, a.A.length-1);
-      guide = a.A.map((s,j)=>`<div class="astep ${j<k||done?"dn":(j===k?"cur":"lk")}"><b>${j<k||done?ic("check"):j+1}</b><div class="tx"><p>${s}</p>${j<=k||done?ta(`${K}.A.s${j}`):`<span class="muted small">${ic("lock")} تُفتح بعد إتمام الخطوة السابقة</span>`}
+      guide = a.A.map((s,j)=>`<div class="astep ${j<k||done?"dn":(j===k?"cur":"lk")}"><b>${j<k||done?ic("check"):j+1}</b><div class="tx"><div class="hasmk ptitle"><p>${s}</p>${j<=k||done?mk(`a${i}-g${j}`):""}</div>${j<=k||done?ta(`${K}.A.s${j}`):`<span class="muted small">${ic("lock")} تُفتح بعد إتمام الخطوة السابقة</span>`}
         ${j===k&&!done&&j<a.A.length-1?`<div><button class="btn sm" data-act="aNext" data-j="${j}">الخطوة التالية${ic("next")}</button></div>`:""}</div></div>`).join("");
     } else if(pr.type==="table"){
       const k = Math.min(m.p[K]||0, pr.rows.length-1);
@@ -316,7 +364,7 @@ function pActivity(){
       product = classifyA(m,i,pr);
     }
   } else {
-    guide = `<div class="hub"><div class="core">${ic("eye")}انظر للمهمة كصورة واحدة</div><div class="stem"></div><div class="ring">${a.H.map(s=>`<div>${ic("link")}<span>${s}</span></div>`).join("")}</div></div>`;
+    guide = `<div class="hub"><div class="core">${ic("eye")}انظر للمهمة كصورة واحدة</div><div class="stem"></div><div class="ring">${a.H.map((s,n)=>`<div class="hasmk">${ic("link")}<span>${s}</span>${mk(`a${i}-g${n}`)}</div>`).join("")}</div></div>`;
     if(pr.type==="table") product = `<h3 class="sec"><span class="si">${ic("test")}</span>${pr.name}</h3><div class="scroll"><table class="ftable"><thead><tr><th>${pr.rowLabel}</th>${pr.cols.map(c=>`<th>${c.label}</th>`).join("")}</tr></thead><tbody>${pr.rows.map((r,j)=>`<tr><td>${r}</td>${pr.cols.map((c,ci)=>`<td>${field(`${K}.T.r${j}.c${ci}`,c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     if(pr.type==="classify") product = classifyH(m,K+".a",pr.cats,pr.items.map(x=>[x.t,x.c,x.why]),pr.hintH,"صنّف البطاقات كلها ثم تحقق",pr.ex,i);
     product += `<div class="stack s"><h3 class="sec"><span class="si">${ic("map")}</span>تصورك المتكامل</h3><p class="muted">اكتب تصوراً واحداً يجمع جوانب التوجيه السابقة ويربط بينها.</p>${ta(`${K}.H.all`,"اكتب تصورك المتكامل هنا")}</div>`;
@@ -435,6 +483,167 @@ function finishSelf(){
   m.f[K+".s"] = m.f[K+".s"] || Date.now(); goto(i<NL-1 ? LU(i+1) : U.posttest);
 }
 
+/* ================= المهارات العملية بالواقع المعزز ================= */
+const SK = SKILLS.ram, NS = SK.steps.length;
+// رابط المهارة: علامة QR تحمل هذا الرابط، فمسحها بكاميرا الهاتف العادية يفتح المهارة مباشرة، وتتعرف عليها البيئة أثناء المسح
+const baseDir = () => location.href.split(/[?#]/)[0].replace(/[^/]*$/, "");
+const markerURL = () => /^https?:/.test(location.protocol) ? `${baseDir()}${SK.page}?m=${SK.marker}` : SK.marker;
+function qrImg(text, cell){ try{ const q = qrcode(0, "H"); q.addData(text); q.make(); return q.createDataURL(cell||8, 4); }catch(e){ return "assets/img/qr-ram.png"; } }
+function arRec(){ const m = M(); m.ar = m.ar || {}; return m.ar.ram || (m.ar.ram = {attempts:0, overview:0, plays:0, steps:{}}); }
+function pSkills(){
+  const r = (S() && S().m && S().m.ar && S().m.ar.ram) || null, done = !!(r && r.doneAt);
+  return head("scan","المهارات العملية بالواقع المعزز","اختر المهارة التي تريد تنفيذها.")+`
+    <a class="modcard ar-card" href="${U.ar}"><div class="side">${ic("ram")}<b>1</b></div>
+      <div class="main"><div class="row"><span class="chip amber">${ic("phone")}واقع معزز</span>${done?`<span class="chip ok">${ic("check")}أتممتها</span>`:""}</div><h2>${SK.title}</h2><p class="muted">${SK.desc}</p>
+      <div class="ar-need"><span>${ic("phone")}هاتف بكاميرا</span><span>${ic("scan")}علامة QR على اللوحة الأم</span><span>${ic("cpu")}جهاز حاسب للتطبيق</span></div>
+      <span class="btn">${done?"أعد التدريب":"ابدأ المهارة"}${ic("next")}</span></div></a>`;
+}
+const AS = {phase:"scan", i:0, view:-1, play:-1, cam:false, status:"", ready:false, gl:true};
+function pAr(){
+  return head("scan",SK.title,"مهارة عملية بالواقع المعزز")+`<div class="ar">
+    <div class="arview" id="arView"><video id="arVideo" muted playsinline></video>
+      <div class="ar-scan" id="arScan" hidden><i></i><i></i><i></i><i></i><span>وجّه الكاميرا إلى علامة QR على اللوحة الأم</span></div>
+      <div class="ar-chip" id="arChip" hidden></div><div class="ar-hint" id="arHint" hidden>${ic("hand")}اسحب لتدوير النموذج</div></div>
+    <div class="arpanel" id="arPanel"></div></div>`
+    + pager({href:U.skills, t:"المهارات العملية"}, null);
+}
+function initAR(){
+  if(AS.ready) return; AS.ready = true;
+  const view = document.getElementById("arView");
+  AS.gl = !!(window.AR && window.THREE && AR.webgl());
+  if(AS.gl){ try{ AR.init(view); AR.setStep(0); }catch(e){ console.warn(e); AS.gl = false; } }
+  if(!AS.gl) view.classList.add("nogl");
+  const r = arRec(); if(r.doneAt){ AS.phase = "done"; }
+  arUpdate();
+}
+function arChip(){
+  const c = document.getElementById("arChip"); if(!c) return;
+  let txt = "";
+  if(AS.phase==="overview") txt = AS.play>=0 ? `${AS.play+1}. ${SK.steps[AS.play].t}` : (AS.view>=0 ? `${AS.view+1}. ${SK.steps[AS.view].t}` : "العرض الكلي للمهارة");
+  else if(AS.phase==="run") txt = `${A?"الخطوة "+(AS.i+1)+": "+SK.steps[AS.i].a:(AS.view>=0&&AS.view!==AS.i?"معاينة: "+SK.steps[AS.view].t:(AS.i+1)+". "+SK.steps[AS.i].t)}`;
+  else if(AS.phase==="done") txt = "تمت المهارة بنجاح";
+  c.textContent = txt; c.hidden = !txt;
+}
+function setModel(k){ if(AS.gl) AR.setStep(k); }
+const stepCard = (k, big) => { const st = SK.steps[k]; return `<div class="ar-step ${big?"focus":""}"><div class="ar-sh"><b>${ic(st.icon)}</b><div><small>الخطوة ${k+1} من ${NS}</small><h3>${A?st.a:st.t}</h3></div></div>
+  <ul>${st.d.map(x=>`<li>${ic("check")}<span>${x}</span></li>`).join("")}</ul>${st.safe?`<div class="note">${ic("shield")}<span>${st.safe}</span></div>`:""}</div>`; };
+function arPanelHTML(){
+  const r = arRec();
+  if(AS.phase==="scan") return `<div class="stack s"><h3 class="sec"><span class="si">${ic("scan")}</span>ابدأ بمسح العلامة</h3>
+    <ol class="ar-howto"><li>جهّز جهاز الحاسب الذي ستطبق عليه المهارة.</li><li>اضغط «تشغيل الكاميرا» واسمح للمتصفح باستخدامها.</li><li>وجّه الكاميرا إلى علامة QR الموجودة على اللوحة الأم.</li></ol>
+    ${AR.camSupported && AR.camSupported() ? `<button class="btn amber" data-act="arCam" ${AS.cam?"disabled":""}>${ic("phone")}${AS.cam?"جارٍ البحث عن العلامة…":"تشغيل الكاميرا"}</button>` : `<div class="fb hint">${ic("alert")}<span>الكاميرا غير متاحة هنا. افتح البيئة من الهاتف عبر رابط الاستضافة (https).</span></div>`}
+    ${AS.status?`<div class="fb ${AS.statusBad?"bad":"info"}">${ic(AS.statusBad?"alert":"info")}<span>${AS.status}</span></div>`:""}
+    <button class="btn ghost" data-act="arFree">${ic("eye")}عرض النموذج بدون كاميرا</button>
+    ${/^https?:/.test(location.protocol)?`<div class="ar-phone"><img src="${qrImg(markerURL(), 5)}" alt="رمز QR لفتح المهارة على الهاتف"><div><b>${ic("phone")}فاتح من اللاب توب؟</b><span>امسح الرمز بكاميرا هاتفك لتفتح المهارة على الهاتف، ثم وجّه الهاتف إلى العلامة الملصقة على اللوحة الأم.</span></div></div>`:""}</div>`;
+  if(AS.phase==="done") return `<div class="stack s"><div class="fb ok">${ic("check")}<span><b>أتممت مهارة ${SK.title}.</b></span></div>
+    <div class="stats"><div class="stat"><b class="num">${fmt(r.time||0)}</b><span>زمن التنفيذ</span></div><div class="stat"><b class="num">${r.attempts||1}</b><span>مرات التدريب</span></div>${!A?`<div class="stat"><b class="num">${r.overview||0}</b><span>مرات الرجوع للعرض الكلي</span></div>`:""}</div>
+    <div class="row"><button class="btn ghost" data-act="arRestart">${ic("refresh")}أعد التدريب</button><a class="btn" href="${U.skills}">المهارات العملية${ic("next")}</a></div></div>`;
+  if(A){ // تحليلي: خطوة واحدة فقط في كل مرة
+    const past = SK.steps.slice(0,AS.i).map((st,k)=>`<div class="ar-past">${ic("check")}<span>${k+1}. ${st.a}</span></div>`).join("");
+    return `<div class="stack s"><div class="row"><span class="chip v">${ic("steps")}التوجيه التحليلي</span><span class="grow"></span><span class="chip amber num">${AS.i+1} / ${NS}</span></div>
+      <div class="bar"><i style="width:${AS.i/NS*100}%"></i></div>${past?`<div class="stack" style="gap:4px">${past}</div>`:""}
+      ${stepCard(AS.i, true)}
+      <button class="btn" data-act="arDone">${ic("check")}تم${AS.i<NS-1?"، الخطوة التالية":"، إنهاء المهارة"}</button></div>`;
+  }
+  // كلي: خريطة المهارة كاملة
+  const chain = SK.steps.map((st,k)=>{ const dn = !!r.steps[k] && AS.phase==="run" && k<AS.i, cur = AS.phase==="run" && k===AS.i, on = AS.play===k || AS.view===k;
+    return `<button class="ar-node ${dn?"dn":""} ${cur?"cur":""} ${on?"on":""}" data-act="arPreview" data-k="${k}"><b>${dn?ic("check"):k+1}</b><span>${ic(st.icon)}${st.t}</span></button>`; }).join("");
+  if(AS.phase==="overview") return `<div class="stack s"><div class="row"><span class="chip v">${ic("map")}التوجيه الكلي</span><h3 class="grow" style="font-size:1rem">خريطة المهارة كاملة</h3></div>
+    <p class="muted small">شاهد كل خطوات المهارة في صورة متكاملة. اضغط أي خطوة لترى ما يحدث فيها على النموذج.</p>
+    <div class="ar-map">${chain}</div>
+    ${AS.view>=0?stepCard(AS.view,false):""}
+    <div class="row"><button class="btn ghost" data-act="arPlay" ${AS.play>=0?"disabled":""}>${ic("play")}${AS.play>=0?"جارٍ العرض…":"شاهد الخطوات متتابعة"}</button><button class="btn" data-act="arStart">${ic("next")}${r.started?"متابعة التنفيذ":"ابدأ التنفيذ"}</button></div></div>`;
+  return `<div class="stack s"><div class="row"><span class="chip v">${ic("map")}التوجيه الكلي</span><span class="grow"></span><button class="btn ghost sm" data-act="arOverview">${ic("map")}العرض الكلي</button></div>
+    <div class="ar-map compact">${chain}</div>
+    ${stepCard(AS.view>=0?AS.view:AS.i, false)}
+    ${AS.view>=0&&AS.view!==AS.i?`<button class="btn ghost" data-act="arBack">${ic("prev")}رجوع للخطوة الحالية</button>`:`<button class="btn" data-act="arDone">${ic("check")}تم${AS.i<NS-1?"، الخطوة التالية":"، إنهاء المهارة"}</button>`}</div>`;
+}
+function arUpdate(){
+  const p = document.getElementById("arPanel"); if(!p) return;
+  p.innerHTML = arPanelHTML(); arChip();
+  const hint = document.getElementById("arHint"); if(hint) hint.hidden = !(AS.gl && !AS.cam && AS.phase!=="scan");
+}
+function arFound(scanned){
+  const r = arRec(); r.attempts = (r.attempts||0) + 1; r.style = styleOf(S()); r.scanned = !!(r.scanned || scanned); r.start = Date.now(); r.steps = {}; delete r.doneAt; delete r.time; r.started = false;
+  AS.i = 0; AS.view = -1; AS.play = -1;
+  if(A){ AS.phase = "run"; r.started = true; setModel(1); } else { AS.phase = "overview"; setModel(0); }
+  save(); arUpdate();
+}
+let playT = null;
+function arPlay(){
+  const r = arRec(); r.plays = (r.plays||0) + 1; save();
+  let k = 0; AS.view = -1;
+  const next = () => { if(k >= NS){ AS.play = -1; setModel(0); arUpdate(); return; } AS.play = k; setModel(k+1); arUpdate(); k++; playT = setTimeout(next, 1900); };
+  next();
+}
+function arDoneStep(){
+  const r = arRec(); r.steps[AS.i] = Date.now(); AS.view = -1;
+  if(AS.i < NS-1){ AS.i++; setModel(AS.i+1); }
+  else { r.doneAt = Date.now(); r.time = Math.round((r.doneAt - r.start)/1000); AS.phase = "done"; setModel(7); }
+  save(); arUpdate();
+}
+function startCam(){
+  AS.cam = true; AS.status = ""; arUpdate();
+  const v = document.getElementById("arVideo"), view = document.getElementById("arView");
+  AR.startCamera(v).then(()=>{
+    view.classList.add("cam"); document.getElementById("arScan").hidden = false;
+    if(AS.gl) AR.setMode("ar");
+    let found = false;
+    AR.scan(a=>{ if(!found){ found = true; document.getElementById("arScan").hidden = true; view.classList.add("found"); arFound(true); } else view.classList.remove("lost"); },
+      ()=>{ if(!found){ AS.status = "هذه ليست علامة مهارة RAM. وجّه الكاميرا إلى العلامة الملصقة على اللوحة الأم."; AS.statusBad = true; arUpdate(); } },
+      ()=>{ view.classList.add("lost"); });
+  }).catch(e=>{ console.warn(e); AS.cam = false; AS.statusBad = true; AS.status = e && e.name==="NotAllowedError" ? "لم يُسمح باستخدام الكاميرا. اسمح بها من إعدادات المتصفح ثم أعد المحاولة." : "تعذر تشغيل الكاميرا على هذا الجهاز."; arUpdate(); });
+}
+
+/* ================= بطاقة العنصر المعززة (ar-card.html?k=) ================= */
+const CS = {k:"", el:null, cam:false, ready:false, gl:true};
+function cardKey(){ const m = /[?&]k=([A-Za-z0-9_-]+)/.exec(location.search); return m ? m[1] : ""; }
+function pCard(){
+  CS.k = CS.k || cardKey(); CS.el = elementByKey(CS.k);
+  if(!CS.el) return head("scan","عنصر معزز")+`<div class="fb hint">${ic("alert")}<span>هذه العلامة غير معروفة. ارجع إلى صفحة المحتوى وامسح علامة أخرى.</span></div>`+pager({href:U.modules, t:"الموديولات"}, null);
+  return head("scan","عنصر معزز",`الموضوع ${CS.el.i+1}: ${MOD.lessons[CS.el.i].t}`)+`<div class="ar">
+    <div class="arview" id="arView"><video id="arVideo" muted playsinline></video><div class="ar-float" id="arFloat"></div>
+      <div class="ar-chip" id="arChip" hidden></div></div>
+    <div class="arpanel" id="arPanel"></div></div>`
+    + pager({href:LU(CS.el.i, CS.el.sec==="a"?"a":"c"), t:CS.el.sec==="a"?"رجوع للنشاط":"رجوع للمحتوى"}, null);
+}
+function cardInit(){
+  if(CS.ready || !CS.el) return; CS.ready = true;
+  const view = document.getElementById("arView");
+  CS.gl = !!(window.AR && window.THREE && AR.webgl());
+  if(CS.gl){ try{ AR.init(view); AR.setStep(0); }catch(e){ CS.gl = false; } }
+  arcRec(CS.k, /[?&]k=/.test(location.search) && document.referrer.indexOf(U.card) === -1 && !/lesson/.test(document.referrer) ? "qr" : "open");
+  cardUpdate();
+}
+function cardUpdate(){
+  const el = CS.el, p = document.getElementById("arPanel"); if(!p || !el) return;
+  const part = partOf(el), list = elements(el.i).filter(e=>e.sec===el.sec), idx = list.findIndex(e=>e.k===el.k);
+  const view = document.getElementById("arView"); view.classList.toggle("has3d", !!(part && CS.gl));
+  if(CS.gl) AR.focus(part);
+  document.getElementById("arFloat").innerHTML = `<b>${ic(el.icon)}</b><span>${esc(el.title)}</span>`;
+  const chip = document.getElementById("arChip"); chip.textContent = part ? "اسحب لتدوير النموذج" : ""; chip.hidden = !part || CS.cam;
+  p.innerHTML = `<div class="stack s"><div class="row"><span class="chip amber">${ic("scan")}${el.sec==="a"?"النشاط التعليمي":"المحتوى"}</span><span class="grow"></span><span class="chip num">${idx+1} / ${list.length}</span></div>
+    <h3 class="sec"><span class="si">${ic(el.icon)}</span>${esc(el.title)}</h3>
+    ${el.lines.length>1?`<ul class="ar-lines">${el.lines.map(x=>`<li>${ic("check")}<span>${esc(x)}</span></li>`).join("")}</ul>`:`<p class="ar-text">${esc(el.lines[0]||"")}</p>`}
+    ${part?`<div class="fb info">${ic("cpu")}<span>الجزء المضيء في النموذج هو المكوّن المرتبط بهذه الفقرة.</span></div>`:""}
+    ${AR.camSupported && AR.camSupported() ? `<button class="btn ${CS.cam?"ghost":"amber"}" data-act="cardCam">${ic("phone")}${CS.cam?"إيقاف الكاميرا":"عرض فوق الكاميرا"}</button>` : ""}
+    ${CS.cam?`<div class="fb hint">${ic("scan")}<span>وجّه الكاميرا إلى علامة أخرى على شاشة الدرس لتنتقل إليها مباشرة.</span></div>`:""}
+    <div class="row">${idx>0?`<button class="btn ghost sm" data-act="cardGo" data-k="${list[idx-1].k}">${ic("prev")}السابق</button>`:""}<span class="grow"></span>${idx<list.length-1?`<button class="btn sm" data-act="cardGo" data-k="${list[idx+1].k}">التالي${ic("next")}</button>`:""}</div></div>`;
+}
+function cardGo(k, via){
+  const el = elementByKey(k); if(!el || k===CS.k) return;
+  CS.k = k; CS.el = el; arcRec(k, via||"open");
+  try{ history.replaceState(null, "", `${U.card}?k=${k}`); }catch(e){}
+  cardUpdate();
+}
+function cardCam(){
+  const v = document.getElementById("arVideo"), view = document.getElementById("arView");
+  if(CS.cam){ AR.stopCamera(); CS.cam = false; view.classList.remove("cam"); cardUpdate(); return; }
+  AR.startCamera(v).then(()=>{ CS.cam = true; view.classList.add("cam","found"); cardUpdate();
+    AR.scan(a=>{ const m = /[?&]k=([A-Za-z0-9_-]+)/.exec(a.data) || /^([ca]\d+-[A-Za-z0-9-]+)$/.exec(a.data); if(m) cardGo(m[1], "scan"); }, null, null, d=>/ar-card\.html\?k=|^[ca]\d+-/.test(d));
+  }).catch(()=>{ CS.cam = false; cardUpdate(); });
+}
+
 /* ================= ملخص الأداء ================= */
 function pSummary(){
   const st = S(), m = M(), sty = styleOf(st), p = progress(m);
@@ -448,6 +657,7 @@ function pSummary(){
       <div class="stat"><b class="num">${gain==null?"-":(gain>0?"+":"")+gain}</b><span>الفرق بين القبلي والبعدي</span></div>
       <div class="stat"><b class="num">${lessonsDone(m)} / ${NL}</b><span>موضوعات مكتملة</span></div>
       <div class="stat"><b>${level(m)}</b><span>مستوى الإرشاد</span></div>
+      <div class="stat"><b>${m.ar&&m.ar.ram&&m.ar.ram.doneAt?"تمت":"لم تتم"}</b><span>مهارة RAM (واقع معزز)</span></div>
     </div>
     <div class="card stack s"><div class="row"><h3 class="grow">التقدم في ${MOD.no}</h3><b class="num">${p}%</b></div><div class="bar"><i style="width:${p}%"></i></div>
       <div class="scroll"><table class="t"><thead><tr><th>م</th><th>الموضوع</th><th>المحتوى</th><th>النشاط</th><th>التقويم الذاتي</th></tr></thead><tbody>
@@ -458,8 +668,8 @@ function pSummary(){
 let adminOk = false; try{ adminOk = sessionStorage.getItem(LS+"-admin")==="1"; }catch(e){}
 const q = v => `"${String(v==null?"":v).replace(/"/g,'""')}"`;
 function csvSummary(){
-  const h = ["code","name","guidance","s3_score","s3_median_rt_ms","s3_total_s","s4_score","s4_median_rt_ms","s4_total_s","wa_ratio","cognitive_style","pre","post","lessons_done","classify_errors","help_hint","help_example","help_review","map_nodes_explored","started"];
-  return [h.join(","),...Object.values(DB.students).map(s=>{ const c=s.scale||{}, m=s.m||{f:{},err:""}; return [s.code,s.name,styleOf(s)||"",c.s3?c.s3.score:"",c.s3?c.s3.med:"",c.s3?c.s3.time:"",c.s4?c.s4.score:"",c.s4?c.s4.med:"",c.s4?c.s4.time:"",c.ratio||"",styleOf(s)||"",m.pre?m.pre.score:"",m.post?m.post.score:"",s.m?lessonsDone(s.m):0,m.err,...(s.m?helpCounts(s.m):["","",""]),s.m&&s.m.map?Object.values(s.m.map).reduce((a,v)=>a+v.length,0):"",s.created].map(q).join(","); })].join("\n");
+  const h = ["code","name","guidance","s3_score","s3_median_rt_ms","s3_total_s","s4_score","s4_median_rt_ms","s4_total_s","wa_ratio","cognitive_style","pre","post","lessons_done","classify_errors","help_hint","help_example","help_review","map_nodes_explored","ar_ram_done","ar_ram_time_s","ar_ram_attempts","ar_ram_overview_views","ar_ram_plays","ar_ram_camera_scan","ar_elements_opened","ar_element_views","ar_element_scans","started"];
+  return [h.join(","),...Object.values(DB.students).map(s=>{ const c=s.scale||{}, m=s.m||{f:{},err:""}; return [s.code,s.name,styleOf(s)||"",c.s3?c.s3.score:"",c.s3?c.s3.med:"",c.s3?c.s3.time:"",c.s4?c.s4.score:"",c.s4?c.s4.med:"",c.s4?c.s4.time:"",c.ratio||"",styleOf(s)||"",m.pre?m.pre.score:"",m.post?m.post.score:"",s.m?lessonsDone(s.m):0,m.err,...(s.m?helpCounts(s.m):["","",""]),s.m&&s.m.map?Object.values(s.m.map).reduce((a,v)=>a+v.length,0):"",...(()=>{ const a = s.m&&s.m.ar&&s.m.ar.ram; return a ? [a.doneAt?1:0, a.time||"", a.attempts||0, a.overview||0, a.plays||0, a.scanned?1:0] : [0,"","","","",""]; })(),...(()=>{ const c = (s.m&&s.m.arc)||{}, v = Object.values(c); return [v.length, v.reduce((a,x)=>a+(x.n||0),0), v.reduce((a,x)=>a+(x.scan||0)+(x.qr||0),0)]; })(),s.created].map(q).join(","); })].join("\n");
 }
 function label(k){ const p = k.split("."), i = +p[0].slice(1), l = MOD.lessons[i]; if(!l) return k;
   if(p[1]==="A") return `الموضوع ${i+1} · نشاط · الخطوة ${+p[2].slice(1)+1}: ${l.act.A[+p[2].slice(1)]}`;
@@ -480,7 +690,7 @@ function adminStats(list){
   const bar = (v,cls,label,sw) => `<div class="vb ${cls}" style="--h:${v==null?0:v*10}%" title="${label}: ${f1(v)} من 10"><span class="vv num">${f1(v)}</span></div>`;
   const group = (k,name) => `<div class="vg"><div class="vbars">${bar(G[k].pre,"s1","القبلي")}${bar(G[k].post,"s2","البعدي")}</div><div class="vl">${name}<small>ن = ${G[k].n}</small></div></div>`;
   return `<div class="card stack s"><h3>${ic("chart")} إحصاءات التجربة</h3>
-    <div class="stats">${tile("user",list.length,"طالب مسجل")}${tile("shapes",done.length,"أكملوا المقياس")}${tile("steps",G.analytic.n,"نمط تحليلي")}${tile("map",G.holistic.n,"نمط كلي")}${tile("check",G.analytic.fin+G.holistic.fin,"أكملوا الموديول")}</div>
+    <div class="stats">${tile("user",list.length,"طالب مسجل")}${tile("shapes",done.length,"أكملوا المقياس")}${tile("steps",G.analytic.n,"نمط تحليلي")}${tile("map",G.holistic.n,"نمط كلي")}${tile("check",G.analytic.fin+G.holistic.fin,"أكملوا الموديول")}${tile("scan",list.filter(s=>s.m&&s.m.ar&&s.m.ar.ram&&s.m.ar.ram.doneAt).length,"أتموا مهارة RAM")}${tile("eye",f1(avg(done.map(s=>Object.keys((s.m&&s.m.arc)||{}).length))),"متوسط العناصر المعززة المفتوحة")}</div>
     <div class="g2" style="align-items:start">
       <div class="vchart"><div class="vt">متوسط درجة الاختبار القبلي والبعدي (من 10) حسب نمط التوجيه</div>
         <div class="vlegend"><span><i class="s1"></i>القبلي</span><span><i class="s2"></i>البعدي</span></div>
@@ -505,6 +715,11 @@ function pAdmin(){
   return head("chart","لوحة الباحث","نمط التوجيه يتحدد لكل طالب تلقائياً من مقياس الأساليب المعرفية")+`
     <div class="row">${ONLINE?`<span class="chip ok">${ic("check")}متصل بقاعدة البيانات · ${esc(FB.adminEmail()||"")}</span><button class="btn ghost sm" data-act="adminRefresh">${ic("refresh")}تحديث البيانات</button>`:`<span class="chip amber">${ic("alert")}وضع محلي: البيانات من هذا الجهاز فقط</span>`}<span class="grow"></span><button class="btn ghost sm" data-act="adminOut">${ic("out")}خروج الأدمن</button></div>
     ${addCard()}
+    <div class="card row" style="align-items:center;gap:18px"><img src="${qrImg(markerURL(), 10)}" alt="علامة QR لمهارة فك وتركيب RAM" class="qr-img">
+      <div class="stack s grow"><h3>${ic("scan")} علامة الواقع المعزز: ${SK.title}</h3>
+        <p class="muted small">اطبع هذه العلامة (حوالي 5 × 5 سم على الأقل) والصقها على اللوحة الأم أو داخل صندوق الحاسب بجوار الذاكرة. الطالب يوجّه كاميرا الهاتف إليها فيظهر النموذج ثلاثي الأبعاد. العلامة تحمل رابط المهارة، فمسحها بكاميرا أي هاتف يفتح المهارة مباشرة: <b dir="ltr" style="word-break:break-all">${esc(markerURL())}</b></p>
+        ${/^https?:/.test(location.protocol)?"":`<p class="fb hint small">${ic("alert")}<span>افتح لوحة الأدمن من رابط الاستضافة ثم اطبع العلامة، حتى تحمل رابط موقعك.</span></p>`}
+        <div><a class="btn sm" href="${qrImg(markerURL(), 16)}" download="qr-ram.gif">${ic("save")}تحميل العلامة للطباعة</a></div></div></div>
     ${adminStats(list)}
     <div class="card row"><div style="flex:0 1 280px"><label for="fCut">حد تصنيف الأسلوب (نسبة كلي/تحليلي)</label><input type="number" id="fCut" step="0.01" min="0.1" value="${DB.cfg.cutoff}"></div><p class="muted small grow">النسبة = وسيط زمن الاستجابة في الاختبار الثالث (مطابقة الأشكال) ÷ وسيطه في الاختبار الرابع (الأشكال المتضمنة)، محسوباً على المفردات الصحيحة. النسبة ≤ الحد = كلي، وأكبر منه = تحليلي. يُطبَّق الحد على من يُكمل المقياس بعد تعديله، ونمط من أكمله يبقى ثابتاً إلا إذا غيرته يدوياً من جدول الطلاب.</p></div>
     <div class="card stack s"><h3>الطلاب (${list.length})</h3>${ONLINE?`<p class="muted small">الحذف يمسح بيانات الطالب من البيئة. لإعادة استخدام نفس اسم المستخدم، احذف حسابه أيضاً من Firebase Console ← Authentication ← Users.</p>`:""}<div class="scroll"><table class="t"><thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الثالث (درجة · وسيط الزمن)</th><th>الرابع (درجة · وسيط الزمن)</th><th>النسبة</th><th>نمط التوجيه</th><th>قبلي</th><th>بعدي</th><th>الموضوعات</th><th>أخطاء</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="11" class="muted">لا توجد بيانات بعد.</td></tr>`}</tbody></table></div></div>
@@ -515,8 +730,10 @@ function pAdmin(){
 /* ================= العرض والأحداث ================= */
 const PAGES = {home:pHome, instructions:pInstructions, login:pLogin, scale:pScale, scaleResult:pScaleResult, modules:pModules, module:pModule, goals:pGoals, lessons:pLessons,
   pretest:()=>pTest("pre"), preResult:()=>pTestResult("pre"), posttest:()=>pTest("post"), postResult:()=>pTestResult("post"),
-  lesson:pLesson, activity:pActivity, self:pSelf, summary:pSummary, admin:pAdmin};
+  lesson:pLesson, activity:pActivity, self:pSelf, summary:pSummary, admin:pAdmin, skills:pSkills, ar:pAr, card:pCard};
 function render(){
+  if(PAGE==="ar" && document.getElementById("arView")){ arUpdate(); return; }
+  if(PAGE==="card" && document.getElementById("arView")){ cardUpdate(); return; }
   const b = document.getElementById("pbody"), t = document.getElementById("ptop"), g = document.getElementById("pbot"), y = b.scrollTop;
   b.innerHTML = PAGES[PAGE]();
   t.replaceChildren(); g.replaceChildren();
@@ -524,6 +741,8 @@ function render(){
   const p = b.lastElementChild; if(p && p.classList.contains("pager")) g.appendChild(p);
   b.classList.toggle("center", PAGE==="home");
   b.scrollTop = y;
+  if(PAGE==="ar") initAR();
+  if(PAGE==="card") cardInit();
 }
 const toTop = () => { const b = document.getElementById("pbody"); if(b) b.scrollTop = 0; };
 function fail(msg){ vp.err = msg; render(); const e = document.querySelector("#pbody .err:not(:empty)"); if(e) e.scrollIntoView({block:"center", behavior:"smooth"}); }
@@ -531,6 +750,7 @@ function fail(msg){ vp.err = msg; render(); const e = document.querySelector("#p
 document.addEventListener("click", ev=>{
   const ln = ev.target.closest("a[href]");
   if(ln){ const h = ln.getAttribute("href"); if(!ln.target && !/^(https?:|mailto:|tel:|#)/.test(h)){ ev.preventDefault(); goto(h); } return; }
+  if(ev.target.id==="mkModal"){ ev.target.remove(); return; }
   const a = ev.target.closest("[data-act]"); if(!a || a.disabled) return;
   const d = a.dataset, m = S() ? M() : null;
   switch(d.act){
@@ -556,6 +776,19 @@ document.addEventListener("click", ev=>{
     case "mapNode": { const K = "L"+PI+".map"; m.map = m.map || {}; const s_ = m.map["L"+PI] || (m.map["L"+PI] = []); if(!s_.includes(d.id)) s_.push(d.id); vp.ms = d.id; vp.mf = false; save(); render(); break; }
     case "mapFail": vp.mf = !vp.mf; render(); break;
     case "doneAct": finishActivity(); break;
+    case "arCam": startCam(); break;
+    case "mk": showMk(d.k); break;
+    case "mkClose": { const x = document.getElementById("mkModal"); if(x) x.remove(); break; }
+    case "cardGo": cardGo(d.k, "open"); break;
+    case "cardCam": cardCam(); break;
+    case "arFree": if(AS.gl) AR.setMode("free"); arFound(false); break;
+    case "arPreview": if(AS.play>=0) break; AS.view = (AS.view===+d.k && AS.phase==="overview") ? -1 : +d.k; setModel(AS.view>=0 ? AS.view+1 : (AS.phase==="run" ? AS.i+1 : 0)); arUpdate(); break;
+    case "arPlay": arPlay(); break;
+    case "arStart": { clearTimeout(playT); AS.play = -1; AS.view = -1; AS.phase = "run"; const r = arRec(); r.started = true; save(); setModel(AS.i+1); arUpdate(); break; }
+    case "arOverview": { const r = arRec(); r.overview = (r.overview||0) + 1; save(); AS.phase = "overview"; AS.view = -1; setModel(0); arUpdate(); break; }
+    case "arBack": AS.view = -1; setModel(AS.i+1); arUpdate(); break;
+    case "arDone": arDoneStep(); break;
+    case "arRestart": AS.phase = AS.cam || !AS.gl ? "scan" : "scan"; AS.status = ""; arFound(AS.cam); break;
     case "doneSelf": finishSelf(); break;
     case "detail": vp = {detail:d.code}; render(); toTop(); break;
     case "adminBack": vp = {}; render(); break;
@@ -566,6 +799,7 @@ document.addEventListener("click", ev=>{
       (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>msg.textContent="تم النسخ. الصقه في ملف واحفظه بامتداد csv.",()=>msg.textContent="حدد النص وانسخه يدوياً (Ctrl+C)."); break; }
   }
 });
+document.addEventListener("keydown", ev=>{ if(ev.key==="Escape"){ const x = document.getElementById("mkModal"); if(x) x.remove(); } });
 document.addEventListener("keydown", ev=>{ if((ev.key==="Enter"||ev.key===" ") && ev.target.matches && ev.target.matches("g.sn")){ ev.preventDefault(); ev.target.dispatchEvent(new MouseEvent("click",{bubbles:true})); } });
 document.addEventListener("input", ev=>{ const k = ev.target.dataset && ev.target.dataset.r; if(k && S()){ M().r[k] = ev.target.value; saveSoon(); } });
 document.addEventListener("change", ev=>{
@@ -581,7 +815,7 @@ document.addEventListener("submit", ev=>{
     if(ONLINE){ studentLogin(u, pw, er, ev.target.querySelector("button")); return; }
     const ex = DB.students[u];
     if(!ex || ex.pass !== pw){ er.textContent = "اسم المستخدم أو كلمة المرور غير صحيحة."; return; }
-    setMe(u); save(); goto(scaleDone(S()) ? U.modules : U.scale);
+    setMe(u); save(); goto(nextAfterLogin(S()));
   }
   if(ev.target.id==="pinForm" && ONLINE){ adminLogin(ev.target); return; }
   if(ev.target.id==="addForm"){ const n = document.getElementById("aName").value, u = document.getElementById("aUser").value, pw = document.getElementById("aPass").value;
@@ -608,6 +842,11 @@ async function adminLogin(form){
   catch(e){ await FB.logout(); btn.disabled = false; er.textContent = e && e.code==="permission-denied" ? "هذا الحساب ليس له صلاحية الأدمن. أضف إيميله في قواعد الأمان (Rules)." : "تعذر تحميل البيانات. تحقق من الإنترنت."; }
 }
 
+function nextAfterLogin(st){
+  let n = ""; try{ n = sessionStorage.getItem("sg-next") || ""; sessionStorage.removeItem("sg-next"); }catch(e){}
+  if(!scaleDone(st)) return U.scale;
+  return n && /^[a-z0-9-]+\.html(\?[A-Za-z0-9=&_.-]*)?$/.test(n) && !/^(login|admin|index)\.html/.test(n) ? n : U.modules;
+}
 /* ---- تسجيل دخول الطالب على قاعدة البيانات ---- */
 async function studentLogin(u, pw, er, btn){
   btn.disabled = true; er.textContent = "";
@@ -618,7 +857,7 @@ async function studentLogin(u, pw, er, btn){
   try{ remote = await FB.getStudent(u); }catch(e){ console.warn(e); }
   if(!remote){ await FB.logout(); btn.disabled = false; er.textContent = "حسابك غير مفعّل في البيئة. راجع القائم على التجربة."; return; }
   DB.students[u] = remote; setMe(u); save();
-  goto(scaleDone(remote) ? U.modules : U.scale);
+  goto(nextAfterLogin(remote));
 }
 
 /* ---- إضافة الطلاب (الأدمن) ---- */
