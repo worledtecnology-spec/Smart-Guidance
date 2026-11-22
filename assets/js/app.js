@@ -2,7 +2,7 @@
 /* ================= أساسيات ================= */
 const PAGE = document.body.dataset.page || "home";
 const PI = document.body.dataset.i != null ? +document.body.dataset.i : null;
-// نمط التوجيه يتحدد لكل طالب من نتيجة مقياس الأساليب المعرفية
+// نمط التوجيه يتحدد لكل طالب في كل موضوع من أدائه (نظام خبير قائم على القواعد)
 let A = false, PNAME = "";
 const NL = MOD.lessons.length;
 const LETTERS = ["أ","ب","ج","د"];
@@ -11,7 +11,7 @@ const TITLE = "تصميم بيئة تعلم معززة قائمة على الت�
 
 /* ================= التخزين ================= */
 const LS = "smart-guidance-adaptive-v1";
-let DB = {students:{}, cfg:{cutoff:CONFIG.cutoff}};
+let DB = {students:{}, cfg:{}};
 try{ const s = localStorage.getItem(LS); if(s) DB = Object.assign(DB, JSON.parse(s)); }catch(e){}
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(DB)); }catch(e){} schedulePush(); }
 /* ---- المزامنة مع Firebase: ONLINE = متصل بقاعدة البيانات ---- */
@@ -38,12 +38,81 @@ const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<"
 const ic = (n, cls="") => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const median = a => { const v = a.slice().sort((x,y)=>x-y), n = v.length; return n ? (n%2 ? v[(n-1)/2] : (v[n/2-1]+v[n/2])/2) : 0; };
 // وسيط زمن الاستجابة (بالمللي ثانية) للمفردات الصحيحة، أو لكل المفردات إذا كانت الصحيحة أقل من 4
-function medianRT(sub, ans, rt){ const ok = rt.filter((t,k)=>ans[k]===KEY[sub][k]); return Math.round(median(ok.length>=4 ? ok : rt)); }
-const lowAcc = sc => sc && ((sc.s3 && sc.s3.score < 9) || (sc.s4 && sc.s4.score < 9));
 const fmt = sec => { sec = Math.round(sec); return String(Math.floor(sec/60)).padStart(2,"0")+":"+String(sec%60).padStart(2,"0"); };
-function styleOf(st){ if(!st) return null; if(st.override) return st.override; if(!st.scale||!st.scale.done) return null; return st.scale.style || (st.scale.ratio <= DB.cfg.cutoff ? "holistic" : "analytic"); }
-function applyStyle(){ const sty = styleOf(S()); A = sty==="analytic"; PNAME = sty ? (A?"التحليلي":"الكلي") : ""; if(sty) document.documentElement.dataset.style = sty; else delete document.documentElement.dataset.style; }
-const scaleDone = st => !!(st && st.scale && st.scale.done);
+
+/* ================= التوجيه الذكي: نظام خبير قائم على القواعد =================
+   نموذج المتعلم ← قاعدة المعرفة (قواعد إذا/فإن) ← محرك الاستدلال ← قرار التوجيه + تفسير للطالب.
+   القرار يُتخذ لكل موضوع على حدة من أداء الطالب، ويمكن أن يتغير داخل النشاط نفسه. */
+const RULES = [
+  {id:"R0", at:"أي وقت", when:"حدد القائم على التجربة نمطاً يدوياً للطالب", then:"يُطبَّق النمط المحدد يدوياً"},
+  {id:"R1", at:"مؤشر الأداء", when:"أخطأ في سؤال الجزء وسؤال الكل معاً", then:"تحليلي، مع تلميح موجه من البداية"},
+  {id:"R2", at:"مؤشر الأداء", when:"أخطأ في سؤال الجزء للمرة الثانية على التوالي", then:"تحليلي، مع تلميح موجه من البداية"},
+  {id:"R3", at:"مؤشر الأداء", when:"أخطأ في سؤال الكل للمرة الثانية على التوالي", then:"كلي، مع تلميح موجه من البداية"},
+  {id:"R4", at:"مؤشر الأداء", when:"أخطأ في سؤال الجزء وأصاب في سؤال الكل", then:"تحليلي (من الجزء إلى الكل)"},
+  {id:"R5", at:"مؤشر الأداء", when:"أصاب في سؤال الجزء وأخطأ في سؤال الكل", then:"كلي (من الكل إلى الجزء)"},
+  {id:"R6", at:"مؤشر الأداء", when:"أصاب في السؤالين واحتاج مثالاً محلولاً أو أكثر في النشاط السابق", then:"يستمر نمط النشاط السابق لتثبيت التعلم"},
+  {id:"R7", at:"مؤشر الأداء", when:"أصاب في السؤالين في الموضوع الأول", then:"النمط الأضعف في الاختبار القبلي (الجزء ← تحليلي، الكل ← كلي)"},
+  {id:"R8", at:"مؤشر الأداء", when:"أصاب في السؤالين في باقي الموضوعات", then:"كلي بإرشاد أقل"},
+  {id:"R9", at:"أثناء النشاط", when:"في التوجيه الكلي أخفق في التحقق من التصنيف مرتين", then:"تحويل فوري إلى التوجيه التحليلي لباقي النشاط"},
+  {id:"R10", at:"أثناء النشاط", when:"أخطأ مرة واحدة في البند نفسه", then:"تلميح موجه"},
+  {id:"R11", at:"أثناء النشاط", when:"أخطأ مرتين في البند نفسه", then:"مثال محلول"},
+  {id:"R12", at:"أثناء النشاط", when:"أخطأ ثلاث مرات في البند نفسه", then:"مراجعة المحتوى وإظهار الإجابة الصحيحة"},
+  {id:"R13", at:"مهارة الواقع المعزز", when:"بدأ مهارة عملية", then:"آخر قرار توجيه للطالب، أو نتيجة الاختبار القبلي إن لم يوجد قرار"}
+];
+const RID = Object.fromEntries(RULES.map(r=>[r.id, r]));
+const WHY = {
+  R0:"حدد القائم على التجربة نمط التوجيه لك.",
+  R1:"أجبت عن سؤالي المؤشر بشكل غير صحيح، فستنفذ النشاط خطوة بخطوة مع تلميح يساعدك من البداية.",
+  R2:"احتجت للمرة الثانية إلى دعم في التفاصيل والخطوات، فستنفذ النشاط خطوة بخطوة مع تلميح من البداية.",
+  R3:"احتجت للمرة الثانية إلى دعم في إدراك العلاقات، فستبدأ بالصورة الكاملة مع تلميح من البداية.",
+  R4:"أدركت الصورة العامة، لكنك تحتاج دعماً في التفاصيل، فستنفذ النشاط خطوة بخطوة.",
+  R5:"تعرف العناصر منفردة، لكنك تحتاج دعماً في إدراك العلاقات بينها، فستبدأ بالصورة الكاملة.",
+  R6:"أداؤك جيد، لكنك احتجت إرشاداً كبيراً في النشاط السابق، فتستمر بنفس التوجيه لتثبيت تعلمك.",
+  R7:"أجبت عن سؤالي المؤشر بشكل صحيح، فاعتمدت البيئة على إجاباتك في الاختبار القبلي.",
+  R8:"أجبت عن سؤالي المؤشر بشكل صحيح، فستأخذ التوجيه الكلي بإرشاد أقل.",
+  R9:"أخفقت في التصنيف مرتين بالتوجيه الكلي، فتحولت البيئة إلى تقسيم المهمة لخطوات متتابعة.",
+  R13:"نمط التوجيه في المهارة هو آخر نمط حددته البيئة لك من أدائك."
+};
+const GE = m => m.ge || (m.ge = {d:{}, log:[]});
+function preProfile(m){ const t = MOD.testTags, a = (m.pre&&m.pre.a)||[]; const sc = tag => { const ix = t.map((x,k)=>x===tag?k:-1).filter(k=>k>=0); return ix.length ? ix.filter(k=>a[k]===MOD.test[k].k).length/ix.length : null; };
+  return {p:sc("p"), w:sc("w")}; }
+// محرك الاستدلال: يمر على القواعد بالترتيب ويطبّق أول قاعدة يتحقق شرطها
+function infer(m, i, dp, dw){
+  const g = GE(m), prev = g.d[i-1], prevHelp = i>0 ? Math.max((m.need||{})["L"+(i-1)+".a"]||0, prev&&prev.lv||0) : 0;
+  if(!dp && !dw) return {rule:"R1", mode:"analytic", lv:1};
+  if(!dp && prev && prev.dp===false) return {rule:"R2", mode:"analytic", lv:1};
+  if(!dw && prev && prev.dw===false) return {rule:"R3", mode:"holistic", lv:1};
+  if(!dp) return {rule:"R4", mode:"analytic", lv:0};
+  if(!dw) return {rule:"R5", mode:"holistic", lv:0};
+  if(prev && prevHelp>=2) return {rule:"R6", mode:prev.act||prev.mode, lv:0};
+  if(i===0){ const pp = preProfile(m); return {rule:"R7", mode:(pp.p!=null && pp.w!=null && pp.p < pp.w) ? "analytic" : "holistic", lv:0, pre:pp}; }
+  return {rule:"R8", mode:"holistic", lv:0};
+}
+function decide(i, dp, dw){
+  const m = M(), g = GE(m), r = infer(m, i, dp, dw), now = Date.now();
+  g.d[i] = {mode:r.mode, lv:r.lv, rule:r.rule, dp, dw, at:now};
+  g.last = r.mode; g.log.push({i, pt:"diag", mode:r.mode, lv:r.lv, rule:r.rule, dp, dw, at:now}); save();
+}
+function switchAct(i, rule){
+  const m = M(), g = GE(m), d = g.d[i]; if(!d || d.act==="analytic") return;
+  d.act = "analytic"; d.sw = rule; g.last = "analytic"; g.log.push({i, pt:"act", mode:"analytic", from:d.mode, rule, at:Date.now()}); save();
+}
+const decOf = (st, i) => st && st.m && st.m.ge && st.m.ge.d[i];
+function guideNow(st, i){
+  if(!st) return null; if(st.override) return st.override;
+  if(i!=null){ const d = decOf(st, i); return d ? (d.act||d.mode) : null; }
+  const g = st.m && st.m.ge; if(g && g.last) return g.last;
+  if(st.m && st.m.pre){ const pp = preProfile(st.m); return (pp.p!=null && pp.w!=null && pp.p < pp.w) ? "analytic" : "holistic"; }
+  return null;
+}
+const ruleOf = (st, i) => { if(st && st.override) return "R0"; if(i==null) return "R13"; const d = decOf(st, i); return d ? (d.sw||d.rule) : null; };
+const baseLv = i => { const st = S(), d = decOf(st, i); return st && !st.override && d ? (d.lv||0) : 0; };
+function applyStyle(){
+  const st = S(), perLesson = ["lesson","activity","self"].includes(PAGE), sty = guideNow(st, perLesson ? PI : null);
+  A = sty==="analytic"; PNAME = sty ? (A?"التحليلي":"الكلي") : "";
+  if(sty) document.documentElement.dataset.style = sty; else delete document.documentElement.dataset.style;
+}
+const styleOf = st => guideNow(st);
 const lessonDone = (m,i) => !!(m.f["L"+i+".c"] && m.f["L"+i+".a"] && m.f["L"+i+".s"]);
 const lessonsDone = m => MOD.lessons.filter((_,i)=>lessonDone(m,i)).length;
 function progress(m){ let d = (m.pre?1:0)+(m.post?1:0); MOD.lessons.forEach((_,i)=>["c","a","s"].forEach(k=>{ if(m.f["L"+i+"."+k]) d++; })); return Math.round(d/(2+NL*3)*100); }
@@ -55,7 +124,7 @@ const level = m => HELP[Math.max(0, ...Object.values(m.need||{}))];
 const helpCounts = m => { const v = Object.values(m.need||{}); return [1,2,3].map(l=>v.filter(x=>x>=l).length); };
 
 /* ================= الملفات والتنقل ================= */
-const U = {home:"index.html", instructions:"instructions.html", login:"login.html", scale:"scale.html", scaleResult:"scale-result.html",
+const U = {home:"index.html", instructions:"instructions.html", login:"login.html",
   modules:"modules.html", module:"module1.html", goals:"module1-goals.html", lessons:"module1-lessons.html",
   pretest:"pretest.html", preResult:"pretest-result.html", posttest:"posttest.html", postResult:"posttest-result.html",
   summary:"summary.html", admin:"admin.html", skills:"skills.html", ar:"ar-ram.html", card:"ar-card.html"};
@@ -72,22 +141,19 @@ window.addEventListener("pageshow", e=>{ document.body.classList.remove("leaving
 
 function gate(){
   const st = S();
-  const login = ["card","skills","ar","scale","scaleResult","modules","module","goals","lessons","pretest","preResult","posttest","postResult","lesson","activity","self","summary"];
+  const login = ["card","skills","ar","modules","module","goals","lessons","pretest","preResult","posttest","postResult","lesson","activity","self","summary"];
   if(login.includes(PAGE) && !st){ try{ sessionStorage.setItem("sg-next", location.href.split("/").pop()); }catch(e){} return U.login; }
   if(!st) return null;
-  const sd = scaleDone(st);
-  if(PAGE==="scale" && sd) return U.scaleResult;
-  if(PAGE==="scaleResult" && !sd) return U.scale;
   const mod = ["card","skills","ar","modules","module","goals","lessons","pretest","preResult","posttest","postResult","lesson","activity","self"];
-  if(mod.includes(PAGE) && !sd) return U.scale;
   if(!mod.includes(PAGE)) return null;
   const m = M();
-  if(PAGE==="skills" || PAGE==="ar" || PAGE==="card") return null;
+  if((PAGE==="skills" || PAGE==="ar") && !m.pre) return U.pretest;
+  if(PAGE==="card") return null;
   if(PAGE==="pretest" && m.pre) return U.preResult;
   if(PAGE==="preResult" && !m.pre) return U.pretest;
   if(["lessons","lesson","activity","self","posttest","postResult"].includes(PAGE) && !m.pre) return U.pretest;
   if(PAGE==="lesson" && PI>0 && !lessonDone(m,PI-1)) return U.lessons;
-  if(PAGE==="activity" && !m.f["L"+PI+".c"]) return LU(PI,"c");
+  if(PAGE==="activity" && !(m.f["L"+PI+".c"] && (decOf(st,PI) || st.override))) return LU(PI,"c");
   if(PAGE==="self" && !m.f["L"+PI+".a"]) return LU(PI,"a");
   if(PAGE==="posttest" && m.post) return U.postResult;
   if(PAGE==="posttest" && lessonsDone(m)<NL) return U.lessons;
@@ -96,12 +162,12 @@ function gate(){
 }
 
 /* ================= الهيدر والأيقونات ================= */
-const SECTION = {home:"home", instructions:"instructions", login:"account", scale:"scale", scaleResult:"scale", summary:"summary", admin:"admin"};
+const SECTION = {home:"home", instructions:"instructions", login:"account", summary:"summary", admin:"admin"};
 function topBar(){
   const st = S(), sec = SECTION[PAGE] != null ? SECTION[PAGE] : "modules";
-  const items = [["home",U.home,"home","الرئيسية","#2f7cf6"],["instructions",U.instructions,"info","التعليمات","#f59e0b"],["scale",U.scale,"shapes","مقياس الأساليب المعرفية","#8b5cf6"],
+  const items = [["home",U.home,"home","الرئيسية","#2f7cf6"],["instructions",U.instructions,"info","التعليمات","#f59e0b"],
                  ["modules",U.modules,"layers","الموديولات","#10b981"],["summary",U.summary,"chart","ملخص الأداء","#ec4899"]];
-  const locked = !st || !scaleDone(st);
+  const locked = !st;
   const nv = items.map(([k,h,i,t,c])=>{ if(k==="modules" && locked) i = "lock"; return [k,h,i,t,c]; }).map(([k,h,i,t,c])=>`<a class="nv ${sec===k?"on":""}" href="${h}" style="--c:${c}" ${sec===k?'aria-current="page"':""}><span class="nb">${ic(i)}</span><span class="nl">${t}</span></a>`).join("");
   const acc = st ? `<button class="nv" data-act="logout" style="--c:#64748b"><span class="nb">${ic("out")}</span><span class="nl">خروج<small>${esc(st.name.split(/\s+/)[0])}</small></span></button>`
                  : `<a class="nv ${sec==="account"?"on":""}" href="${U.login}" style="--c:#0ea5e9" ${sec==="account"?'aria-current="page"':""}><span class="nb">${ic("user")}</span><span class="nl">دخول الطالب</span></a>`;
@@ -133,22 +199,22 @@ function pHome(){
 
 /* ================= التعليمات ================= */
 function pInstructions(){
-  const steps = [["user","سجّل دخولك","باسم المستخدم وكلمة المرور اللي استلمتهم من القائم على التجربة."],["shapes","أجب عن مقياس الأساليب المعرفية","اختباران فرعيان من 16 مفردة، يُحسب زمنهما آلياً."],
-    ["test","أدِّ الاختبار القبلي","قبل دراسة الموديول."],["book","ادرس الموضوعات بالترتيب","لكل موضوع صفحة محتوى، ثم صفحة نشاط، ثم صفحة تقويم ذاتي."],
+  const steps = [["user","سجّل دخولك","باسم المستخدم وكلمة المرور اللي استلمتهم من القائم على التجربة."],
+    ["test","أدِّ الاختبار القبلي","قبل دراسة الموديول."],["book","ادرس الموضوعات بالترتيب","لكل موضوع صفحة محتوى ينتهي بمؤشر أداء، ثم صفحة نشاط، ثم صفحة تقويم ذاتي."],
     ["test","أدِّ الاختبار البعدي","بعد إتمام كل موضوعات الموديول."],["chart","راجع ملخص أدائك","درجاتك وتقدمك."]];
-  const rules = [["lock","الموضوعات تُفتح بالترتيب، ولا يُفتح موضوع قبل إتمام السابق."],["clock","مقياس الأساليب المعرفية والاختباران يُؤدَّى كل منها مرة واحدة فقط."],
+  const rules = [["lock","الموضوعات تُفتح بالترتيب، ولا يُفتح موضوع قبل إتمام السابق."],["clock","الاختباران ومؤشر الأداء في كل موضوع تُؤدَّى مرة واحدة فقط."],
     ["save","إجاباتك تُحفظ تلقائياً على هذا الجهاز، فاستخدم نفس الجهاز والمتصفح دائماً."],["shield","الأنشطة العملية تُنفذ في المعمل بعد فصل الكهرباء واتباع قواعد السلامة."],
     ["pen","اكتب إجاباتك بأسلوبك، فالمطلوب تفكيرك أنت."],["help","إذا واجهتك مشكلة فنية فارجع إلى القائم على التجربة."]];
   return head("info","تعليمات استخدام البيئة","اقرأ هذه التعليمات قبل أن تبدأ.")+`
     <h2 class="sec"><span class="si">${ic("steps")}</span>خطوات السير داخل البيئة</h2>
     <div class="g3">${steps.map((s,k)=>`<div class="tile"><span class="stepno">${k+1}</span><div class="ti">${ic(s[0])}</div><h3>${s[1]}</h3><p class="muted small">${s[2]}</p></div>`).join("")}</div>
     <h2 class="sec"><span class="si">${ic("brain")}</span>التوجيه الذكي</h2>
-    <div class="def">${ic("brain")}<div>لا تُفتح الموديولات إلا بعد إجابتك عن مقياس الأساليب المعرفية. تحلل البيئة نتيجتك وتحدد أسلوبك (تحليلي أو كلي)، ثم توجهك تلقائياً إلى نمط التوجيه المناسب لك، وتدرس كل الأنشطة وفقه.</div></div>
-    ${PNAME?`<h2 class="sec"><span class="si">${ic(A?"steps":"map")}</span>نمط التوجيه الخاص بك: ${PNAME}</h2>
-    <div class="def">${ic(A?"steps":"map")}<div>${A?"تُقدَّم لك المهمة في كل نشاط مقسمة إلى خطوات فرعية متتابعة. تنجز خطوة ثم تُفتح التالية، وتحصل على تغذية راجعة محددة عند كل إجراء.":"تُعرض عليك المهمة في كل نشاط كاملة مع خريطة توجيه تربط جوانبها ببعضها. تنظر للصورة الكلية أولاً، ثم تكوّن تصوراً متكاملاً."}</div></div>`:""}
+    <div class="def">${ic("brain")}<div>تعمل البيئة كنظام خبير: في نهاية محتوى كل موضوع تجيب عن سؤالين قصيرين (مؤشر الأداء)، أحدهما عن الجزء والآخر عن الكل. تحلل البيئة إجابتك وأداءك في النشاط السابق، وتطبق قواعد التوجيه لتحدد نوع التوجيه المناسب لك في النشاط، وتوضح لك سبب اختيارها. وقد يتغير التوجيه أثناء النشاط إذا احتجت إلى دعم أكبر.</div></div>
+    <div class="g2"><div class="def">${ic("steps")}<div><b>التوجيه التحليلي (من الجزء إلى الكل)</b><br>المهمة مقسمة إلى خطوات فرعية متتابعة، تنجز خطوة ثم تُفتح التالية، مع تغذية راجعة عند كل إجراء.</div></div>
+      <div class="def">${ic("map")}<div><b>التوجيه الكلي (من الكل إلى الجزء)</b><br>المهمة كاملة مع خريطة تربط جوانبها وعلاقاتها، ترى الصورة الكلية أولاً ثم تكوّن تصوراً متكاملاً.</div></div></div>
     <h2 class="sec"><span class="si">${ic("flag")}</span>قواعد مهمة</h2>
     <div class="ilist">${rules.map(r=>`<div class="il"><div class="ii">${ic(r[0])}</div><span>${r[1]}</span></div>`).join("")}</div>`
-    + pager(null, S() ? (scaleDone(S()) ? {href:U.modules, t:"الموديولات"} : {href:U.scale, t:"مقياس الأساليب المعرفية"}) : {href:U.login, t:"تسجيل الدخول"});
+    + pager(null, S() ? {href:U.modules, t:"الموديولات"} : {href:U.login, t:"تسجيل الدخول"});
 }
 
 /* ================= الدخول ================= */
@@ -156,7 +222,7 @@ function pLogin(){
   const st = S();
   if(st) return head("user","تسجيل الدخول")+`<div class="card stack" style="max-width:560px;width:100%;margin:0 auto">
       <div class="fb ok">${ic("check")}<span>أنت مسجل الآن باسم <b>${esc(st.name)}</b>.</span></div>
-      <div class="row"><a class="btn" href="${scaleDone(st)?U.modules:U.scale}">متابعة${ic("next")}</a><button class="btn ghost" data-act="logoutHere">لست أنا، تسجيل خروج</button></div></div>`;
+      <div class="row"><a class="btn" href="${U.modules}">متابعة${ic("next")}</a><button class="btn ghost" data-act="logoutHere">لست أنا، تسجيل خروج</button></div></div>`;
   return head("user","دخول الطالب","ادخل باسم المستخدم وكلمة المرور اللي استلمتهم من القائم على التجربة.")+`<div class="card" style="max-width:560px;width:100%;margin:0 auto">
     <form id="loginForm" class="stack" novalidate>
       <div><label for="fUser">اسم المستخدم</label><input type="text" id="fUser" dir="ltr" autocomplete="username" autocapitalize="off" spellcheck="false"></div>
@@ -164,58 +230,6 @@ function pLogin(){
       <div class="err" id="loginErr"></div>
       <button class="btn" type="submit">دخول${ic("next")}</button>
     </form></div>`;
-}
-
-/* ================= المقياس ================= */
-let run = null, tick = null;
-function pScale(){
-  if(run) return scaleItem();
-  const sc = S().scale || {}, sub = sc.s3 ? "s4" : "s3", d = SUB[sub];
-  return head("shapes","مقياس الأساليب المعرفية",`${d.name} · الجزء ${sub==="s3"?1:2} من 2`)+`<div class="card stack">
-    <h2 class="sec"><span class="si">${ic("info")}</span>تعليمات ${d.name}</h2>
-    <div class="stack s">${d.intro.map((t,k)=>`<div class="il" style="box-shadow:none"><div class="ii">${k+1}</div><span>${t}</span></div>`).join("")}</div>
-    <div class="fb hint">${ic("clock")}<span>عدد المفردات 16. لا يمكن الرجوع لمفردة سابقة، ولا إعادة الاختبار بعد إنهائه.</span></div>
-    <div><button class="btn amber" data-act="startSub" data-sub="${sub}">${ic("play")}ابدأ ${d.name}</button></div>
-    <p class="muted small">المقياس من إعداد د. عادل سعد خضر، أستاذ علم النفس، جامعة الزقازيق.</p></div>`;
-}
-function scaleItem(){
-  const d = SUB[run.sub], n = run.i+1;
-  clearInterval(tick);
-  tick = setInterval(()=>{ const e = document.getElementById("clk"); if(e && run) e.textContent = fmt((performance.now()-run.t0)/1000); else clearInterval(tick); }, 500);
-  return `<div class="card stack">
-    <div class="row"><span class="chip v">${d.name}</span><span class="grow"></span><span class="chip num">${ic("clock")}<span id="clk">${fmt((performance.now()-run.t0)/1000)}</span></span><span class="chip amber num">المفردة ${n} من 16</span></div>
-    <div class="bar"><i style="width:${(run.i/16)*100}%"></i></div>
-    <div class="pair">
-      <div class="fig"><span class="cap">${d.capA}</span><div class="box"><img alt="الشكل الأول" src="assets/scale/${run.sub}_${n}_a.png"></div></div>
-      <div class="fig"><span class="cap">${d.capB}</span><div class="box"><img alt="الشكل الثاني" src="assets/scale/${run.sub}_${n}_b.png"></div></div>
-    </div>
-    <div class="yn"><button class="y" data-act="ans" data-v="1">${ic("check")}نعم</button><button class="no" data-act="ans" data-v="0">${ic("x")}لا</button></div></div>`;
-}
-function answer(v){
-  const now = performance.now();
-  run.ans.push(!!v); run.rt.push(Math.round(now-run.last)); run.last = now; run.i++;
-  if(run.i < 16){ render(); return; }
-  clearInterval(tick);
-  const st = S(); st.scale = st.scale || {};
-  st.scale[run.sub] = {ans:run.ans, rt:run.rt, time:+((now-run.t0)/1000).toFixed(1), med:medianRT(run.sub, run.ans, run.rt), score:run.ans.filter((a,k)=>a===KEY[run.sub][k]).length};
-  const sub = run.sub; run = null;
-  if(sub==="s4"){ st.scale.ratio = +(st.scale.s3.med/st.scale.s4.med).toFixed(3); st.scale.style = st.scale.ratio <= DB.cfg.cutoff ? "holistic" : "analytic"; st.scale.done = true; st.scale.at = new Date().toISOString(); save(); goto(U.scaleResult); return; }
-  save(); render(); toTop();
-}
-function pScaleResult(){
-  const st = S(), sc = st.scale, sty = styleOf(st), an = sty==="analytic";
-  return head("brain","نتيجة مقياس الأساليب المعرفية")+`<div class="card stack">
-    <div class="row" style="gap:18px"><div class="big">${ic(an?"steps":"map")}</div>
-      <div class="grow"><p class="muted">أسلوبك المعرفي</p><h2 style="font-size:1.9rem;color:var(--v-deep)">الأسلوب ال${SNAME[sty]}</h2>
-      <p>${an?"تميل إلى معالجة المعلومات جزءاً بعد جزء: تفحص كل عنصر على حدة ثم تبني الصورة الكاملة.":"تميل إلى معالجة المعلومات كصورة واحدة: ترى الكل وعلاقاته أولاً ثم تنزل إلى التفاصيل."}</p></div></div>
-    <div class="stats">
-      <div class="stat"><b class="num">${sc.s3.score} / 16</b><span>درجة الاختبار الثالث</span></div><div class="stat"><b class="num">${(sc.s3.med/1000).toFixed(2)} ث</b><span>متوسط زمن المفردة (الثالث)</span></div>
-      <div class="stat"><b class="num">${sc.s4.score} / 16</b><span>درجة الاختبار الرابع</span></div><div class="stat"><b class="num">${(sc.s4.med/1000).toFixed(2)} ث</b><span>متوسط زمن المفردة (الرابع)</span></div>
-    </div></div>
-    <div class="card stack s"><h2 class="sec"><span class="si">${ic(an?"steps":"map")}</span>تم توجيهك إلى: التوجيه ال${SNAME[sty]}</h2>
-      <div class="ilist">${(an?[["steps","من الجزء إلى الكل."],["list","المهمة مقسمة إلى خطوات فرعية متتابعة."],["bulb","إرشادات تفصيلية عند كل خطوة."],["check","تغذية راجعة محددة حول كل إجراء."]]
-        :[["map","من الكل إلى الجزء."],["eye","رؤية شاملة للمهمة قبل تفاصيلها."],["link","توضيح العلاقات بين جوانب المهمة."],["brain","تكوين تصور متكامل للحل."]]).map(x=>`<div class="il"><div class="ii">${ic(x[0])}</div><span>${x[1]}</span></div>`).join("")}</div></div>`
-    + pager(null, {href:U.modules, t:"ابدأ الدراسة: الموديولات"});
 }
 
 /* ================= الموديولات ================= */
@@ -265,7 +279,8 @@ function pTestResult(kind){
   const m = M(), r = m[kind], name = kind==="pre" ? "نتيجة الاختبار القبلي" : "نتيجة الاختبار البعدي";
   return head("check",name,`${MOD.no}: ${MOD.title}`)+`<div class="card stack" style="max-width:560px;width:100%;margin:0 auto;text-align:center">
     <div class="score" style="--p:${r.score*10}"><div class="num">${r.score}/10</div></div><h2>تم تسجيل إجاباتك</h2>
-    <p class="muted">${kind==="pre"?"هذه درجتك قبل دراسة الموديول. ابدأ الآن دراسة الموضوعات.":"أتممت الموديول الأول."}</p></div>`
+    <p class="muted">${kind==="pre"?"هذه درجتك قبل دراسة الموديول. ابدأ الآن دراسة الموضوعات.":"أتممت الموديول الأول."}</p>
+    ${kind==="pre"?(()=>{ const pp = preProfile(m), pc = v => v==null?"-":Math.round(v*100)+"%"; return `<div class="stats"><div class="stat"><b class="num">${pc(pp.p)}</b><span>${ic("steps")} أسئلة الجزء</span></div><div class="stat"><b class="num">${pc(pp.w)}</b><span>${ic("map")} أسئلة الكل</span></div></div><p class="muted small">تستخدم البيئة هذه النتيجة مع مؤشر الأداء في كل موضوع لتحديد نوع التوجيه المناسب لك.</p>`; })():""}</div>`
     + pager(null, kind==="pre" ? {href:U.lessons, t:"موضوعات الموديول"} : {href:U.summary, t:"ملخص الأداء"});
 }
 
@@ -330,9 +345,31 @@ function blocks(l){
     return "";
   }).join("");
 }
+const LETTERS_ = ["أ","ب","ج","د"];
+const dperm = (i,t) => { const r = (i*3 + (t==="w"?2:1)) % 4; return [0,1,2,3].map(j=>(j+r)%4); };
+function diagQ(i,t){
+  const q = MOD.diag[i][t], d = decOf(S(), i), pk = d ? (d["a"+t]) : (vp.dg||{})[t], order = dperm(i,t);
+  return `<div class="qcard"><h3><b>${ic(t==="p"?"steps":"map")}</b><span>${q.q}</span></h3><div class="opts">${order.map(o=>{
+    const cls = d ? (o===0?"ok":(o===pk?"no":"")) : (pk===o?"sel":"");
+    return `<button class="opt ${cls}" ${d?"disabled":""} data-act="dq" data-t="${t}" data-o="${o}"><i>${LETTERS_[order.indexOf(o)]}</i>${q.o[o]}</button>`; }).join("")}</div></div>`;
+}
+function diagBox(i){
+  const st = S(), d = decOf(st, i);
+  return `<div class="card stack s diag"><div class="row"><h2 class="sec grow"><span class="si">${ic("brain")}</span>مؤشر الأداء</h2>${d?`<span class="chip ok">${ic("check")}تم</span>`:""}</div>
+    <p class="muted small">${d?"تم تحليل إجابتك وتحديد نوع التوجيه في النشاط.":"أجب عن السؤالين. على أساس إجابتك تحدد البيئة نوع التوجيه المناسب لك في النشاط. يُجاب مرة واحدة."}</p>
+    ${diagQ(i,"p")}${diagQ(i,"w")}${d?guideBanner(i):""}<div class="err">${vp.err||""}</div></div>`;
+}
+function guideBanner(i){
+  const st = S(), d = decOf(st, i), mode = guideNow(st, i), rid = ruleOf(st, i); if(!mode) return "";
+  const an = mode==="analytic", ind = d ? [["steps","سؤال الجزء", d.dp?"صحيح":"غير صحيح", d.dp],["map","سؤال الكل", d.dw?"صحيح":"غير صحيح", d.dw]] : [];
+  if(d && i>0){ const pv = Math.max((S().m.need||{})["L"+(i-1)+".a"]||0, 0); ind.push(["bulb","الإرشاد في النشاط السابق", HELP[pv], pv<2]); }
+  return `<div class="xpl ${an?"an":"ho"}"><div class="xh"><b>${ic(an?"steps":"map")}</b><div><small>قرار التوجيه الذكي</small><h3>التوجيه ${an?"التحليلي":"الكلي"}${d&&d.sw?` <span class="chip amber">${ic("refresh")}تحوّل أثناء النشاط</span>`:""}</h3></div></div>
+    <p>${WHY[rid]||""}</p>
+    <details><summary>${ic("info")}لماذا هذا القرار؟</summary><div class="xind">${ind.map(x=>`<span class="${x[3]?"ok":"no"}">${ic(x[0])}${x[1]}: <b>${x[2]}</b></span>`).join("")}<span>${ic("brain")}القاعدة المطبقة: <b dir="ltr">${rid}</b> · ${RID[rid]?RID[rid].when:""}</span></div></details></div>`;
+}
 function pLesson(){
   const l = MOD.lessons[PI];
-  return head(l.icon,l.t,`الموضوع ${PI+1} من ${NL}`)+arHint()+blocks(l)
+  return head(l.icon,l.t,`الموضوع ${PI+1} من ${NL}`)+arHint()+blocks(l)+diagBox(PI)
     + pager({href:U.lessons, t:"موضوعات الموديول"}, {act:"doneContent", t:"النشاط التعليمي"});
 }
 
@@ -345,7 +382,7 @@ function field(key,c){
 function pActivity(){
   const m = M(), i = PI, l = MOD.lessons[i], a = l.act, pr = a.prod, K = "L"+i, done = !!m.f[K+".a"];
   const brief = arHint()+`<div class="brief"><div class="b goal-b hasmk">${ic("target")}<div><b>الهدف من النشاط</b>${a.goal}</div>${mk(K.replace("L","a")+"-goal")}</div>
-     <div class="b lvl-b">${ic(a.lab?"wrench":"pen")}<div><b>${a.lab?"نشاط عملي يُنفذ في المعمل":"نشاط تحليل وتطبيق"}</b>مستوى الإرشاد الحالي: ${HELP[(m.need||{})[K+".a"]||0]}</div></div>
+     <div class="b lvl-b">${ic(a.lab?"wrench":"pen")}<div><b>${a.lab?"نشاط عملي يُنفذ في المعمل":"نشاط تحليل وتطبيق"}</b>مستوى الإرشاد الحالي: ${HELP[Math.max(baseLv(i),(m.need||{})[K+".a"]||0)]}</div></div>
      <div class="b task-b hasmk">${ic("alert")}<div><b>المهمة المطلوب تنفيذها</b>${a.task}</div>${mk(K.replace("L","a")+"-task")}</div></div>`;
   const strip = `<div class="strip">${a.A.map((s,k)=>`<div class="hasmk"><b>${k+1}</b><span>${s}</span>${mk(`a${i}-g${k}`)}</div>`).join("")}</div>`;
   let guide, product = "";
@@ -369,7 +406,8 @@ function pActivity(){
     if(pr.type==="classify") product = classifyH(m,K+".a",pr.cats,pr.items.map(x=>[x.t,x.c,x.why]),pr.hintH,"صنّف البطاقات كلها ثم تحقق",pr.ex,i);
     product += `<div class="stack s"><h3 class="sec"><span class="si">${ic("map")}</span>تصورك المتكامل</h3><p class="muted">اكتب تصوراً واحداً يجمع جوانب التوجيه السابقة ويربط بينها.</p>${ta(`${K}.H.all`,"اكتب تصورك المتكامل هنا")}</div>`;
   }
-  return head("pen",`النشاط التعليمي (${i+1})`,l.t)+brief
+  const startHint = baseLv(i)>=1 && !done ? `<div class="fb hint">${ic("bulb")}<span><b>تلميح موجه:</b> ${A ? `ابدأ بـ «${a.A[0]}»، ولا تنتقل للخطوة التالية قبل إتمامها.` : `قبل أن تبدأ، اربط بين «${a.H[0]}» و«${a.H[1]||a.H[0]}»، ثم انظر لباقي الجوانب في ضوئهما.`}${pr.type==="classify"&&HINT_A[i]?" "+HINT_A[i]:""}</span></div>` : "";
+  return head("pen",`النشاط التعليمي (${i+1})`,l.t)+guideBanner(i)+startHint+brief
     + (!A && MAP_LESSONS.includes(i) ? systemMap(m,K) : "")
     + `<div class="gpanel"><div class="gh">${ic(A?"steps":"map")}${A?"التوجيه التحليلي: نفّذ المهمة خطوة بخطوة":"التوجيه الكلي: كوّن الصورة الكاملة أولاً"}</div><div class="gb">${guide}</div></div>`
     + product + (done?`<div class="fb ok">${ic("check")}<span>أتممت هذا النشاط.</span></div>`:"") + `<div class="err">${vp.err||""}</div>`
@@ -383,7 +421,7 @@ function classifyA(m,i,pr){
   const key = "L"+i+".a", c = m.c[key] || (m.c[key] = {k:0, e:{}, ok:false}), n = pr.items.length;
   const past = pr.items.slice(0,c.k).map(x=>`<div class="citem r"><div class="row"><span class="chip ok">${ic("check")}${pr.cats[x.c]}</span><b class="grow">${x.t}</b></div><span class="small">${x.why}</span></div>`).join("");
   if(c.k>=n) return `<h3 class="sec"><span class="si">${ic("shapes")}</span>نتيجة التصنيف</h3>${past}`;
-  const x = pr.items[c.k], fb = vp.cfb, wrong = c.e[c.k]||0, solved = fb && fb.ok, lv = Math.min(3, wrong);
+  const x = pr.items[c.k], fb = vp.cfb, wrong = c.e[c.k]||0, solved = fb && fb.ok, lv = wrong ? Math.min(3, wrong + baseLv(i)) : 0;
   return `<div class="row"><h3 class="sec grow"><span class="si">${ic("shapes")}</span>صنّف البطاقات واحدة بعد أخرى <span class="chip amber num">${c.k+1} من ${n}</span></h3>${helpChip(lv)}</div>${past}
     <div class="bigcard">${x.t}</div>
     <div class="cats" style="justify-content:center">${pr.cats.map((t,k)=>`<button class="cat ${fb&&fb.k===k?"sel":""}" ${solved?"disabled":""} data-act="cA" data-k="${k}">${t}</button>`).join("")}</div>
@@ -395,7 +433,7 @@ function classifyA(m,i,pr){
 // كلي: كل العناصر معاً ثم تحقق واحد؛ الإرشاد يتدرج مع المحاولات: تلميح عام ← مثال محلول ← مراجعة المحتوى وإظهار الصحيح
 function classifyH(m,key,cats,items,hint,title,ex,li){
   const c = m.c[key] || (m.c[key] = {pick:{}, chk:false, ok:false, tries:0});
-  const right = items.filter((x,j)=>c.pick[j]===x[1]).length, fails = c.fails||0, lv = c.ok ? 0 : Math.min(3, fails);
+  const right = items.filter((x,j)=>c.pick[j]===x[1]).length, fails = c.fails||0, lv = c.ok || !fails ? 0 : Math.min(3, fails + (/\.a$/.test(key) ? baseLv(li) : 0));
   return `<div class="row"><h3 class="sec grow"><span class="si">${ic("shapes")}</span>${title}</h3>${helpChip(lv)}</div>
     ${items.map((x,j)=>{ const st = c.chk ? (c.pick[j]===x[1]?"r":"w") : ""; return `<div class="citem ${st}"><b>${x[0]}</b><div class="cats">${cats.map((t,k)=>`<button class="cat ${c.pick[j]===k?"sel":""}" ${c.ok?"disabled":""} data-act="cH" data-key="${key}" data-j="${j}" data-k="${k}">${t}</button>`).join("")}</div>${c.ok&&x[2]?`<span class="small">${x[2]}</span>`:""}${!c.ok&&lv>=3&&st==="w"?`<span class="small">الصحيح: <b>${cats[x[1]]}</b>${x[2]?" · "+x[2]:""}</span>`:""}</div>`; }).join("")}
     ${c.chk&&!c.ok?`<div class="fb bad">${ic("x")}<span><b>${right} من ${items.length} في موضعها الصحيح.</b> العناصر المظللة بالأحمر تحتاج إعادة نظر.</span></div>`:""}
@@ -500,7 +538,7 @@ function pSkills(){
 }
 const AS = {phase:"scan", i:0, view:-1, play:-1, cam:false, status:"", ready:false, gl:true};
 function pAr(){
-  return head("scan",SK.title,"مهارة عملية بالواقع المعزز")+`<div class="ar">
+  return head("scan",SK.title,`مهارة عملية بالواقع المعزز · التوجيه ${A?"التحليلي":"الكلي"} (${ruleOf(S())})`)+`<div class="ar">
     <div class="arview" id="arView"><video id="arVideo" muted playsinline></video>
       <div class="ar-scan" id="arScan" hidden><i></i><i></i><i></i><i></i><span>وجّه الكاميرا إلى علامة QR على اللوحة الأم</span></div>
       <div class="ar-chip" id="arChip" hidden></div><div class="ar-hint" id="arHint" hidden>${ic("hand")}اسحب لتدوير النموذج</div></div>
@@ -564,7 +602,7 @@ function arUpdate(){
   const hint = document.getElementById("arHint"); if(hint) hint.hidden = !(AS.gl && !AS.cam && AS.phase!=="scan");
 }
 function arFound(scanned){
-  const r = arRec(); r.attempts = (r.attempts||0) + 1; r.style = styleOf(S()); r.scanned = !!(r.scanned || scanned); r.start = Date.now(); r.steps = {}; delete r.doneAt; delete r.time; r.started = false;
+  const r = arRec(); r.attempts = (r.attempts||0) + 1; r.style = guideNow(S()); r.rule = ruleOf(S()); r.scanned = !!(r.scanned || scanned); r.start = Date.now(); r.steps = {}; delete r.doneAt; delete r.time; r.started = false;
   AS.i = 0; AS.view = -1; AS.play = -1;
   if(A){ AS.phase = "run"; r.started = true; setModel(1); } else { AS.phase = "overview"; setModel(0); }
   save(); arUpdate();
@@ -646,12 +684,12 @@ function cardCam(){
 
 /* ================= ملخص الأداء ================= */
 function pSummary(){
-  const st = S(), m = M(), sty = styleOf(st), p = progress(m);
+  const st = S(), m = M(), p = progress(m), g = GE(m);
   const gain = m.pre&&m.post ? m.post.score-m.pre.score : null;
   const cell = d => d ? `<span class="chip ok">${ic("check")}تم</span>` : `<span class="chip">لم يتم</span>`;
   return head("chart","ملخص الأداء",esc(st.name))+`<div class="stats">
-      <div class="stat"><b>${sty?SNAME[sty]:"-"}</b><span>الأسلوب المعرفي</span></div>
-      <div class="stat"><b>${PNAME||"-"}</b><span>نمط التوجيه</span></div>
+      <div class="stat"><b class="num">${Object.values(g.d).filter(x=>(x.act||x.mode)==="analytic").length} / ${Object.values(g.d).filter(x=>(x.act||x.mode)==="holistic").length}</b><span>قرارات التوجيه (تحليلي / كلي)</span></div>
+      <div class="stat"><b class="num">${g.log.filter(x=>x.pt==="act").length}</b><span>تحولات أثناء الأنشطة</span></div>
       <div class="stat"><b class="num">${m.pre?m.pre.score+" / 10":"-"}</b><span>الاختبار القبلي</span></div>
       <div class="stat"><b class="num">${m.post?m.post.score+" / 10":"-"}</b><span>الاختبار البعدي</span></div>
       <div class="stat"><b class="num">${gain==null?"-":(gain>0?"+":"")+gain}</b><span>الفرق بين القبلي والبعدي</span></div>
@@ -660,17 +698,20 @@ function pSummary(){
       <div class="stat"><b>${m.ar&&m.ar.ram&&m.ar.ram.doneAt?"تمت":"لم تتم"}</b><span>مهارة RAM (واقع معزز)</span></div>
     </div>
     <div class="card stack s"><div class="row"><h3 class="grow">التقدم في ${MOD.no}</h3><b class="num">${p}%</b></div><div class="bar"><i style="width:${p}%"></i></div>
-      <div class="scroll"><table class="t"><thead><tr><th>م</th><th>الموضوع</th><th>المحتوى</th><th>النشاط</th><th>التقويم الذاتي</th></tr></thead><tbody>
-      ${MOD.lessons.map((l,i)=>`<tr><td class="num">${i+1}</td><td>${l.t}</td><td>${cell(m.f["L"+i+".c"])}</td><td>${cell(m.f["L"+i+".a"])}</td><td>${cell(m.f["L"+i+".s"])}</td></tr>`).join("")}</tbody></table></div></div>`;
+      <div class="scroll"><table class="t"><thead><tr><th>م</th><th>الموضوع</th><th>المحتوى</th><th>النشاط</th><th>التقويم الذاتي</th><th>التوجيه</th></tr></thead><tbody>
+      ${MOD.lessons.map((l,i)=>{ const d = g.d[i], md = d && (d.act||d.mode); return `<tr><td class="num">${i+1}</td><td>${l.t}</td><td>${cell(m.f["L"+i+".c"])}</td><td>${cell(m.f["L"+i+".a"])}</td><td>${cell(m.f["L"+i+".s"])}</td><td>${md?`<span class="chip ${md==="analytic"?"an":"ho"}">${ic(md==="analytic"?"steps":"map")}${SNAME[md]}${d.act?" (تحوّل)":""}</span>`:"-"}</td></tr>`; }).join("")}</tbody></table></div></div>`;
 }
 
 /* ================= لوحة الباحث ================= */
 let adminOk = false; try{ adminOk = sessionStorage.getItem(LS+"-admin")==="1"; }catch(e){}
 const q = v => `"${String(v==null?"":v).replace(/"/g,'""')}"`;
 function csvSummary(){
-  const h = ["code","name","guidance","s3_score","s3_median_rt_ms","s3_total_s","s4_score","s4_median_rt_ms","s4_total_s","wa_ratio","cognitive_style","pre","post","lessons_done","classify_errors","help_hint","help_example","help_review","map_nodes_explored","ar_ram_done","ar_ram_time_s","ar_ram_attempts","ar_ram_overview_views","ar_ram_plays","ar_ram_camera_scan","ar_elements_opened","ar_element_views","ar_element_scans","started"];
-  return [h.join(","),...Object.values(DB.students).map(s=>{ const c=s.scale||{}, m=s.m||{f:{},err:""}; return [s.code,s.name,styleOf(s)||"",c.s3?c.s3.score:"",c.s3?c.s3.med:"",c.s3?c.s3.time:"",c.s4?c.s4.score:"",c.s4?c.s4.med:"",c.s4?c.s4.time:"",c.ratio||"",styleOf(s)||"",m.pre?m.pre.score:"",m.post?m.post.score:"",s.m?lessonsDone(s.m):0,m.err,...(s.m?helpCounts(s.m):["","",""]),s.m&&s.m.map?Object.values(s.m.map).reduce((a,v)=>a+v.length,0):"",...(()=>{ const a = s.m&&s.m.ar&&s.m.ar.ram; return a ? [a.doneAt?1:0, a.time||"", a.attempts||0, a.overview||0, a.plays||0, a.scanned?1:0] : [0,"","","","",""]; })(),...(()=>{ const c = (s.m&&s.m.arc)||{}, v = Object.values(c); return [v.length, v.reduce((a,x)=>a+(x.n||0),0), v.reduce((a,x)=>a+(x.scan||0)+(x.qr||0),0)]; })(),s.created].map(q).join(","); })].join("\n");
+  const h = ["code","name","current_guidance","diag_part_correct","diag_whole_correct","decisions_analytic","decisions_holistic","activity_switches","pre_part_pct","pre_whole_pct","pre","post","lessons_done","classify_errors","help_hint","help_example","help_review","map_nodes_explored","ar_ram_done","ar_ram_time_s","ar_ram_attempts","ar_ram_overview_views","ar_ram_plays","ar_ram_camera_scan","ar_elements_opened","ar_element_views","ar_element_scans","started"];
+  return [h.join(","),...Object.values(DB.students).map(s=>{ const m=s.m||{f:{},err:""}; const gd = (s.m&&s.m.ge&&s.m.ge.d)||{}, gv = Object.values(gd), pp = s.m&&s.m.pre ? preProfile(s.m) : {}; return [s.code,s.name,guideNow(s)||"",gv.filter(x=>x.dp).length,gv.filter(x=>x.dw).length,gv.filter(x=>(x.act||x.mode)==="analytic").length,gv.filter(x=>(x.act||x.mode)==="holistic").length,gv.filter(x=>x.act).length,pp.p==null?"":Math.round(pp.p*100),pp.w==null?"":Math.round(pp.w*100),m.pre?m.pre.score:"",m.post?m.post.score:"",s.m?lessonsDone(s.m):0,m.err,...(s.m?helpCounts(s.m):["","",""]),s.m&&s.m.map?Object.values(s.m.map).reduce((a,v)=>a+v.length,0):"",...(()=>{ const a = s.m&&s.m.ar&&s.m.ar.ram; return a ? [a.doneAt?1:0, a.time||"", a.attempts||0, a.overview||0, a.plays||0, a.scanned?1:0] : [0,"","","","",""]; })(),...(()=>{ const c = (s.m&&s.m.arc)||{}, v = Object.values(c); return [v.length, v.reduce((a,x)=>a+(x.n||0),0), v.reduce((a,x)=>a+(x.scan||0)+(x.qr||0),0)]; })(),s.created].map(q).join(","); })].join("\n");
 }
+function csvDecisions(){ const rows = [["code","name","lesson","point","guidance","help_start","rule","rule_condition","diag_part_correct","diag_whole_correct","switched_from","time"].join(",")];
+  Object.values(DB.students).forEach(s=>{ ((s.m&&s.m.ge&&s.m.ge.log)||[]).forEach(x=>rows.push([s.code,s.name,x.i+1,x.pt==="diag"?"مؤشر الأداء":"أثناء النشاط",x.mode,x.lv==null?"":HELP[x.lv],x.rule,RID[x.rule]?RID[x.rule].when:"",x.dp==null?"":(x.dp?1:0),x.dw==null?"":(x.dw?1:0),x.from||"",new Date(x.at).toISOString()].map(q).join(","))); });
+  return rows.join("\n"); }
 function label(k){ const p = k.split("."), i = +p[0].slice(1), l = MOD.lessons[i]; if(!l) return k;
   if(p[1]==="A") return `الموضوع ${i+1} · نشاط · الخطوة ${+p[2].slice(1)+1}: ${l.act.A[+p[2].slice(1)]}`;
   if(p[1]==="H") return `الموضوع ${i+1} · نشاط · التصور المتكامل`;
@@ -681,38 +722,44 @@ function csvAnswers(){ const rows = [["code","name","item","answer"].join(",")];
 const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 const f1 = v => v==null ? "-" : (Math.round(v*10)/10).toString();
 function adminStats(list){
-  const done = list.filter(s=>scaleDone(s)), by = k => done.filter(s=>styleOf(s)===k);
-  const grp = k => { const g = by(k), pre = g.filter(s=>s.m&&s.m.pre).map(s=>s.m.pre.score), post = g.filter(s=>s.m&&s.m.post).map(s=>s.m.post.score);
-    const pairs = g.filter(s=>s.m&&s.m.pre&&s.m.post); return {n:g.length, pre:avg(pre), post:avg(post), npre:pre.length, npost:post.length,
-      gain:avg(pairs.map(s=>s.m.post.score-s.m.pre.score)), done:avg(g.map(s=>s.m?lessonsDone(s.m):0)), fin:g.filter(s=>s.m&&s.m.post).length}; };
-  const G = {analytic:grp("analytic"), holistic:grp("holistic")};
   const tile = (icon,v,t) => `<div class="stat"><b class="num">${v}</b><span>${ic(icon)} ${t}</span></div>`;
-  const bar = (v,cls,label,sw) => `<div class="vb ${cls}" style="--h:${v==null?0:v*10}%" title="${label}: ${f1(v)} من 10"><span class="vv num">${f1(v)}</span></div>`;
-  const group = (k,name) => `<div class="vg"><div class="vbars">${bar(G[k].pre,"s1","القبلي")}${bar(G[k].post,"s2","البعدي")}</div><div class="vl">${name}<small>ن = ${G[k].n}</small></div></div>`;
+  const pre = list.filter(s=>s.m&&s.m.pre).map(s=>s.m.pre.score), post = list.filter(s=>s.m&&s.m.post).map(s=>s.m.post.score), pairs = list.filter(s=>s.m&&s.m.pre&&s.m.post);
+  const D = i => list.map(s=>decOf(s,i)).filter(Boolean), logs = list.flatMap(s=>(s.m&&s.m.ge&&s.m.ge.log)||[]);
+  const ruleN = RULES.map(r=>[r.id, logs.filter(x=>x.rule===r.id).length]).filter(x=>x[1]);
+  const bar = (v,cls,label) => `<div class="vb ${cls}" style="--h:${v==null?0:v*10}%" title="${label}: ${f1(v)} من 10"><span class="vv num">${f1(v)}</span></div>`;
   return `<div class="card stack s"><h3>${ic("chart")} إحصاءات التجربة</h3>
-    <div class="stats">${tile("user",list.length,"طالب مسجل")}${tile("shapes",done.length,"أكملوا المقياس")}${tile("steps",G.analytic.n,"نمط تحليلي")}${tile("map",G.holistic.n,"نمط كلي")}${tile("check",G.analytic.fin+G.holistic.fin,"أكملوا الموديول")}${tile("scan",list.filter(s=>s.m&&s.m.ar&&s.m.ar.ram&&s.m.ar.ram.doneAt).length,"أتموا مهارة RAM")}${tile("eye",f1(avg(done.map(s=>Object.keys((s.m&&s.m.arc)||{}).length))),"متوسط العناصر المعززة المفتوحة")}</div>
+    <div class="stats">${tile("user",list.length,"طالب مسجل")}${tile("test",pre.length,"أدوا القبلي")}${tile("check",post.length,"أكملوا الموديول")}${tile("brain",logs.filter(x=>x.pt==="diag").length,"قرار توجيه")}${tile("refresh",logs.filter(x=>x.pt==="act").length,"تحول أثناء النشاط")}${tile("scan",list.filter(s=>s.m&&s.m.ar&&s.m.ar.ram&&s.m.ar.ram.doneAt).length,"أتموا مهارة RAM")}</div>
     <div class="g2" style="align-items:start">
-      <div class="vchart"><div class="vt">متوسط درجة الاختبار القبلي والبعدي (من 10) حسب نمط التوجيه</div>
+      <div class="vchart"><div class="vt">متوسط درجة الاختبار القبلي والبعدي (من 10)</div>
         <div class="vlegend"><span><i class="s1"></i>القبلي</span><span><i class="s2"></i>البعدي</span></div>
-        <div class="vplot"><div class="vgrid"><span data-v="10"></span><span data-v="5"></span><span data-v="0"></span></div>${group("analytic","التوجيه التحليلي")}${group("holistic","التوجيه الكلي")}</div></div>
-      <div class="scroll"><table class="t"><thead><tr><th>النمط</th><th>العدد</th><th>متوسط القبلي</th><th>متوسط البعدي</th><th>متوسط الفرق</th><th>متوسط الموضوعات المكتملة</th></tr></thead><tbody>
-        ${[["analytic","تحليلي"],["holistic","كلي"]].map(([k,n])=>`<tr><td>${n}</td><td class="num">${G[k].n}</td><td class="num">${f1(G[k].pre)} <small class="muted">(${G[k].npre})</small></td><td class="num">${f1(G[k].post)} <small class="muted">(${G[k].npost})</small></td><td class="num">${G[k].gain==null?"-":(G[k].gain>0?"+":"")+f1(G[k].gain)}</td><td class="num">${f1(G[k].done)} / ${NL}</td></tr>`).join("")}
-      </tbody></table><p class="muted small" style="margin-top:6px">الأرقام بين القوسين عدد من أدّى الاختبار. الفرق محسوب لمن أدّى الاختبارين.</p></div>
-    </div></div>`;
+        <div class="vplot"><div class="vgrid"><span data-v="10"></span><span data-v="5"></span><span data-v="0"></span></div><div class="vg"><div class="vbars">${bar(avg(pre),"s1","القبلي")}${bar(avg(post),"s2","البعدي")}</div><div class="vl">كل الطلاب<small>متوسط الفرق ${pairs.length?f1(avg(pairs.map(s=>s.m.post.score-s.m.pre.score))):"-"}</small></div></div></div></div>
+      <div class="scroll"><table class="t"><thead><tr><th>الموضوع</th><th>تحليلي</th><th>كلي</th><th>تحوّل</th><th>أصاب الجزء</th><th>أصاب الكل</th></tr></thead><tbody>
+        ${MOD.lessons.map((l,i)=>{ const d = D(i); return `<tr><td>${i+1}. ${l.t}</td><td class="num">${d.filter(x=>x.mode==="analytic").length}</td><td class="num">${d.filter(x=>x.mode==="holistic").length}</td><td class="num">${d.filter(x=>x.act).length}</td><td class="num">${d.filter(x=>x.dp).length}</td><td class="num">${d.filter(x=>x.dw).length}</td></tr>`; }).join("")}
+      </tbody></table><p class="muted small" style="margin-top:6px">تحليلي/كلي: قرار مؤشر الأداء. تحوّل: تحول للتحليلي أثناء النشاط (R9).</p></div>
+    </div>
+    ${ruleN.length?`<div class="row" style="gap:6px;flex-wrap:wrap"><b class="small">مرات تطبيق القواعد:</b>${ruleN.map(([id,n])=>`<span class="chip" title="${RID[id].when}"><b dir="ltr">${id}</b>&nbsp;${n}</span>`).join("")}</div>`:""}</div>`;
+}
+function kbCard(){
+  return `<details class="card kb"><summary><h3>${ic("brain")} قاعدة المعرفة: قواعد التوجيه الذكي (${RULES.length})</h3></summary>
+    <p class="muted small">يطبّق محرك الاستدلال القواعد بالترتيب، وأول قاعدة يتحقق شرطها هي التي تحدد القرار. المدخلات: سؤالا مؤشر الأداء في كل موضوع (جزء/كل)، ومستوى الإرشاد في النشاط السابق، ونتيجة أسئلة الجزء والكل في الاختبار القبلي، والأداء أثناء النشاط.</p>
+    <div class="scroll"><table class="t"><thead><tr><th>القاعدة</th><th>نقطة القرار</th><th>إذا</th><th>فإن</th></tr></thead><tbody>${RULES.map(r=>`<tr><td><b dir="ltr">${r.id}</b></td><td>${r.at}</td><td>${r.when}</td><td>${r.then}</td></tr>`).join("")}</tbody></table></div></details>`;
 }
 function pAdmin(){
   if(!adminOk) return head("lock","دخول الأدمن","لوحة الباحث، للقائم على التجربة فقط.")+`<div class="card" style="max-width:440px;width:100%;margin:0 auto">
     <form id="pinForm" class="stack">${ONLINE?`<div><label for="fEmail">البريد الإلكتروني</label><input type="text" id="fEmail" dir="ltr" autocomplete="username" inputmode="email"></div><div><label for="fPin">كلمة المرور</label><input type="password" id="fPin" autocomplete="current-password"></div>`:`<div><label for="fPin">الرقم السري</label><input type="password" id="fPin" autocomplete="off"></div>`}<div class="err" id="pinErr"></div><button class="btn" type="submit">دخول${ic("next")}</button></form></div>`;
   const list = Object.values(DB.students);
   if(vp.detail && DB.students[vp.detail]){ const s = DB.students[vp.detail], r = s.m ? s.m.r : {};
-    return head("user",esc(s.name),"إجابات الطالب المكتوبة")+Object.keys(r).sort().filter(k=>(r[k]||"").trim()).map(k=>`<div class="card stack s" style="padding:16px"><b class="small" style="color:var(--v)">${esc(label(k))}</b><p>${esc(r[k])}</p></div>`).join("")
+    const lg = (s.m&&s.m.ge&&s.m.ge.log)||[];
+    return head("user",esc(s.name),"سجل قرارات التوجيه والإجابات المكتوبة")+`<div class="card stack s"><h3>${ic("brain")} سجل قرارات التوجيه (${lg.length})</h3>${lg.length?`<div class="scroll"><table class="t"><thead><tr><th>الموضوع</th><th>نقطة القرار</th><th>الجزء</th><th>الكل</th><th>القرار</th><th>القاعدة</th><th>الوقت</th></tr></thead><tbody>${lg.map(x=>`<tr><td class="num">${x.i+1}</td><td>${x.pt==="diag"?"مؤشر الأداء":"أثناء النشاط"}</td><td>${x.dp==null?"-":(x.dp?"✓":"✗")}</td><td>${x.dw==null?"-":(x.dw?"✓":"✗")}</td><td>${SNAME[x.mode]}${x.lv?" + "+HELP[x.lv]:""}</td><td title="${RID[x.rule]?RID[x.rule].when:""}"><b dir="ltr">${x.rule}</b></td><td class="num small">${new Date(x.at).toLocaleString("ar-EG",{dateStyle:"short",timeStyle:"short"})}</td></tr>`).join("")}</tbody></table></div>`:`<p class="muted small">لم يتخذ أي قرار بعد.</p>`}</div>`+Object.keys(r).sort().filter(k=>(r[k]||"").trim()).map(k=>`<div class="card stack s" style="padding:16px"><b class="small" style="color:var(--v)">${esc(label(k))}</b><p>${esc(r[k])}</p></div>`).join("")
       +(Object.keys(r).length?"":`<p class="muted">لا توجد إجابات مكتوبة بعد.</p>`)+`<div class="pager"><button class="btn ghost" data-act="adminBack">${ic("prev")}قائمة الطلاب</button><span></span></div>`; }
-  const rows = list.map(s=>{ const c=s.scale||{}, sty=styleOf(s), m=s.m;
-    return `<tr><td>${esc(s.code)}</td><td>${esc(s.name)}</td><td class="num">${c.s3?c.s3.score+" · "+(c.s3.med/1000).toFixed(2)+" ث":"-"}</td><td class="num">${c.s4?c.s4.score+" · "+(c.s4.med/1000).toFixed(2)+" ث":"-"}</td><td class="num">${c.ratio||"-"}${lowAcc(c)?` <span class="chip amber" title="درجة أقل من 9 من 16 في أحد الاختبارين">دقة منخفضة</span>`:""}</td>
-     <td>${s.scale&&s.scale.done?`<select data-ov="${esc(s.code)}" aria-label="نمط التوجيه"><option value="">${SNAME[s.scale.style||(s.scale.ratio<=DB.cfg.cutoff?"holistic":"analytic")]} (من المقياس)</option><option value="analytic" ${s.override==="analytic"?"selected":""}>تحليلي (يدوي)</option><option value="holistic" ${s.override==="holistic"?"selected":""}>كلي (يدوي)</option></select>`:`<span class="chip">لم يُكمل المقياس</span>`}</td>
+  const rows = list.map(s=>{ const m=s.m, cur=guideNow(s), gv=Object.values((m&&m.ge&&m.ge.d)||{});
+    return `<tr><td>${esc(s.code)}</td><td>${esc(s.name)}</td>
+
+     <td><select data-ov="${esc(s.code)}" aria-label="نمط التوجيه"><option value="">تلقائي${!s.override&&cur?" · "+SNAME[cur]:""}</option><option value="analytic" ${s.override==="analytic"?"selected":""}>تحليلي (يدوي، R0)</option><option value="holistic" ${s.override==="holistic"?"selected":""}>كلي (يدوي، R0)</option></select></td>
+     <td class="num">${gv.filter(x=>(x.act||x.mode)==="analytic").length} / ${gv.filter(x=>(x.act||x.mode)==="holistic").length}${gv.some(x=>x.act)?` <span class="chip amber" title="تحول أثناء النشاط">${gv.filter(x=>x.act).length}</span>`:""}</td>
      <td class="num">${m&&m.pre?m.pre.score:"-"}</td><td class="num">${m&&m.post?m.post.score:"-"}</td><td class="num">${m?lessonsDone(m)+" / "+NL:"-"}</td><td class="num">${m?m.err:"-"}</td>
-     <td><button class="btn ghost sm" data-act="detail" data-code="${esc(s.code)}">الإجابات</button> <button class="btn ghost sm" data-act="delStu" data-code="${esc(s.code)}">${vp.del===s.code?"تأكيد الحذف":"حذف"}</button></td></tr>`; }).join("");
-  return head("chart","لوحة الباحث","نمط التوجيه يتحدد لكل طالب تلقائياً من مقياس الأساليب المعرفية")+`
+     <td><button class="btn ghost sm" data-act="detail" data-code="${esc(s.code)}">السجل</button> <button class="btn ghost sm" data-act="delStu" data-code="${esc(s.code)}">${vp.del===s.code?"تأكيد الحذف":"حذف"}</button></td></tr>`; }).join("");
+  return head("chart","لوحة الباحث","نمط التوجيه يتحدد لكل طالب في كل موضوع من أدائه، بقواعد النظام الخبير")+`
     <div class="row">${ONLINE?`<span class="chip ok">${ic("check")}متصل بقاعدة البيانات · ${esc(FB.adminEmail()||"")}</span><button class="btn ghost sm" data-act="adminRefresh">${ic("refresh")}تحديث البيانات</button>`:`<span class="chip amber">${ic("alert")}وضع محلي: البيانات من هذا الجهاز فقط</span>`}<span class="grow"></span><button class="btn ghost sm" data-act="adminOut">${ic("out")}خروج الأدمن</button></div>
     ${addCard()}
     <div class="card row" style="align-items:center;gap:18px"><img src="${qrImg(markerURL(), 10)}" alt="علامة QR لمهارة فك وتركيب RAM" class="qr-img">
@@ -721,14 +768,15 @@ function pAdmin(){
         ${/^https?:/.test(location.protocol)?"":`<p class="fb hint small">${ic("alert")}<span>افتح لوحة الأدمن من رابط الاستضافة ثم اطبع العلامة، حتى تحمل رابط موقعك.</span></p>`}
         <div><a class="btn sm" href="${qrImg(markerURL(), 16)}" download="qr-ram.gif">${ic("save")}تحميل العلامة للطباعة</a></div></div></div>
     ${adminStats(list)}
-    <div class="card row"><div style="flex:0 1 280px"><label for="fCut">حد تصنيف الأسلوب (نسبة كلي/تحليلي)</label><input type="number" id="fCut" step="0.01" min="0.1" value="${DB.cfg.cutoff}"></div><p class="muted small grow">النسبة = وسيط زمن الاستجابة في الاختبار الثالث (مطابقة الأشكال) ÷ وسيطه في الاختبار الرابع (الأشكال المتضمنة)، محسوباً على المفردات الصحيحة. النسبة ≤ الحد = كلي، وأكبر منه = تحليلي. يُطبَّق الحد على من يُكمل المقياس بعد تعديله، ونمط من أكمله يبقى ثابتاً إلا إذا غيرته يدوياً من جدول الطلاب.</p></div>
-    <div class="card stack s"><h3>الطلاب (${list.length})</h3>${ONLINE?`<p class="muted small">الحذف يمسح بيانات الطالب من البيئة. لإعادة استخدام نفس اسم المستخدم، احذف حسابه أيضاً من Firebase Console ← Authentication ← Users.</p>`:""}<div class="scroll"><table class="t"><thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الثالث (درجة · وسيط الزمن)</th><th>الرابع (درجة · وسيط الزمن)</th><th>النسبة</th><th>نمط التوجيه</th><th>قبلي</th><th>بعدي</th><th>الموضوعات</th><th>أخطاء</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="11" class="muted">لا توجد بيانات بعد.</td></tr>`}</tbody></table></div></div>
+    ${kbCard()}
+    <div class="card stack s"><h3>الطلاب (${list.length})</h3>${ONLINE?`<p class="muted small">الحذف يمسح بيانات الطالب من البيئة. لإعادة استخدام نفس اسم المستخدم، احذف حسابه أيضاً من Firebase Console ← Authentication ← Users.</p>`:""}<div class="scroll"><table class="t"><thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>التوجيه</th><th>قرارات ت / ك</th><th>قبلي</th><th>بعدي</th><th>الموضوعات</th><th>أخطاء</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="9" class="muted">لا توجد بيانات بعد.</td></tr>`}</tbody></table></div></div>
     <div class="g2"><div class="card stack s"><h3>تصدير النتائج (CSV)</h3><textarea class="mono" id="csv1" readonly>${esc(csvSummary())}</textarea><div class="row"><button class="btn sm" data-act="copy" data-t="csv1">نسخ</button><span class="muted small" id="m-csv1"></span></div></div>
+      <div class="card stack s"><h3>تصدير سجل قرارات التوجيه (CSV)</h3><textarea class="mono" id="csv3" readonly>${esc(csvDecisions())}</textarea><div class="row"><button class="btn sm" data-act="copy" data-t="csv3">نسخ</button><span class="muted small" id="m-csv3"></span></div></div>
       <div class="card stack s"><h3>تصدير الإجابات المكتوبة (CSV)</h3><textarea class="mono" id="csv2" readonly>${esc(csvAnswers())}</textarea><div class="row"><button class="btn sm" data-act="copy" data-t="csv2">نسخ</button><span class="muted small" id="m-csv2"></span></div></div></div>`;
 }
 
 /* ================= العرض والأحداث ================= */
-const PAGES = {home:pHome, instructions:pInstructions, login:pLogin, scale:pScale, scaleResult:pScaleResult, modules:pModules, module:pModule, goals:pGoals, lessons:pLessons,
+const PAGES = {home:pHome, instructions:pInstructions, login:pLogin, modules:pModules, module:pModule, goals:pGoals, lessons:pLessons,
   pretest:()=>pTest("pre"), preResult:()=>pTestResult("pre"), posttest:()=>pTest("post"), postResult:()=>pTestResult("post"),
   lesson:pLesson, activity:pActivity, self:pSelf, summary:pSummary, admin:pAdmin, skills:pSkills, ar:pAr, card:pCard};
 function render(){
@@ -759,11 +807,14 @@ document.addEventListener("click", ev=>{
     case "genPass": { const f = document.getElementById("aPass"); if(f) f.value = genPass(); break; }
     case "addBulk": { const box = document.getElementById("fBulk"); vp.bulk = box ? box.value : ""; addBulk(); break; }
     case "clearAdded": ADDED = []; render(); break;
-    case "startSub": run = {sub:d.sub, i:0, ans:[], rt:[], t0:performance.now(), last:performance.now()}; render(); toTop(); break;
-    case "ans": answer(d.v==="1"); break;
     case "tq": TT[d.kind][+d.q] = +d.o; vp.err = ""; render(); break;
     case "submitTest": submitTest(PAGE==="pretest"?"pre":"post"); break;
-    case "doneContent": m.f["L"+PI+".c"] = m.f["L"+PI+".c"] || Date.now(); goto(LU(PI,"a")); break;
+    case "dq": vp.dg = vp.dg || {}; vp.dg[d.t] = +d.o; vp.err = ""; render(); break;
+    case "doneContent": {
+      const st = S();
+      if(!decOf(st, PI) && !st.override){ const g = vp.dg||{}; if(g.p==null || g.w==null){ fail("أجب عن سؤالي مؤشر الأداء أولاً."); break; }
+        decide(PI, g.p===0, g.w===0); const dd = GE(m).d[PI]; dd.ap = g.p; dd.aw = g.w; save(); vp.dg = null; }
+      m.f["L"+PI+".c"] = m.f["L"+PI+".c"] || Date.now(); goto(LU(PI,"a")); break; }
     case "aNext": { const K = "L"+PI; if((m.r[`${K}.A.s${d.j}`]||"").trim().length<2){ vp.err = "اكتب إجابتك في هذه الخطوة أولاً."; } else { m.p[K] = +d.j+1; vp.err = ""; save(); } render(); break; }
     case "rNext": { const K = "L"+PI, pr = MOD.lessons[PI].act.prod; if(!pr.cols.every((_,ci)=>(m.r[`${K}.T.r${d.j}.c${ci}`]||"").trim().length>=2)){ vp.err = "أكمل خانات هذا البند أولاً."; } else { m.p[K] = +d.j+1; vp.err = ""; save(); } render(); break; }
     case "cA": { const c = m.c["L"+PI+".a"], x = MOD.lessons[PI].act.prod.items[c.k], ok = x.c === +d.k; if(!ok){ c.e[c.k] = (c.e[c.k]||0)+1; m.err++; raiseNeed(m, "L"+PI+".a", c.e[c.k]); } save(); vp.cfb = {k:+d.k, ok}; vp.err = ""; render(); break; }
@@ -772,7 +823,10 @@ document.addEventListener("click", ev=>{
     case "cHCheck": { const c = m.c[d.key], n = +d.n, K = d.key.split("."), l = MOD.lessons[+K[0].slice(1)];
       const items = K[1]==="a" ? l.act.prod.items.map(x=>x.c) : l.sa[+K[1].slice(1)].items.map(x=>x[1]);
       if(Object.keys(c.pick).length < n){ const e = document.getElementById("e-"+d.key.replace(/\./g,"-")); if(e) e.textContent = "صنّف كل العناصر أولاً."; break; }
-      const wrong = items.filter((k,j)=>c.pick[j]!==k).length; c.chk = true; c.tries++; if(wrong){ m.err += wrong; c.fails = (c.fails||0)+1; raiseNeed(m, d.key, c.fails); } else c.ok = true; save(); vp.err = ""; render(); break; }
+      const wrong = items.filter((k,j)=>c.pick[j]!==k).length; c.chk = true; c.tries++; if(wrong){ m.err += wrong; c.fails = (c.fails||0)+1; raiseNeed(m, d.key, c.fails); } else c.ok = true;
+      // R9: في التوجيه الكلي، إخفاقان في التحقق ← تحويل فوري إلى التوجيه التحليلي
+      if(wrong && K[1]==="a" && !A && c.fails>=2 && !S().override){ const pi = +K[0].slice(1); switchAct(pi, "R9"); m.c[d.key] = {k:0, e:{}, ok:false, from:{fails:c.fails, tries:c.tries}}; applyStyle(); }
+      save(); vp.err = ""; render(); if(A && K[1]==="a") toTop(); break; }
     case "mapNode": { const K = "L"+PI+".map"; m.map = m.map || {}; const s_ = m.map["L"+PI] || (m.map["L"+PI] = []); if(!s_.includes(d.id)) s_.push(d.id); vp.ms = d.id; vp.mf = false; save(); render(); break; }
     case "mapFail": vp.mf = !vp.mf; render(); break;
     case "doneAct": finishActivity(); break;
@@ -803,7 +857,6 @@ document.addEventListener("keydown", ev=>{ if(ev.key==="Escape"){ const x = docu
 document.addEventListener("keydown", ev=>{ if((ev.key==="Enter"||ev.key===" ") && ev.target.matches && ev.target.matches("g.sn")){ ev.preventDefault(); ev.target.dispatchEvent(new MouseEvent("click",{bubbles:true})); } });
 document.addEventListener("input", ev=>{ const k = ev.target.dataset && ev.target.dataset.r; if(k && S()){ M().r[k] = ev.target.value; saveSoon(); } });
 document.addEventListener("change", ev=>{
-  if(ev.target.id==="fCut"){ const v = parseFloat(ev.target.value); if(v>0){ DB.cfg.cutoff = v; save(); if(ONLINE) FB.saveSettings({cutoff:v}).catch(e=>alertAdmin(e)); render(); } }
   if(ev.target.dataset && ev.target.dataset.ov){ const code = ev.target.dataset.ov, s = DB.students[code], v = ev.target.value; if(s){ if(v) s.override = v; else delete s.override; save(); if(ONLINE) FB.setOverride(code, v).catch(e=>alertAdmin(e)); render(); } }
   const k = ev.target.dataset && ev.target.dataset.r; if(k && S() && ev.target.tagName==="SELECT"){ M().r[k] = ev.target.value; saveSoon(); }
 });
@@ -829,7 +882,7 @@ window.addEventListener("beforeunload", ()=>{ try{ localStorage.setItem(LS, JSON
 function alertAdmin(e){ console.warn(e); const m = e && e.code==="permission-denied" ? "ليست لديك صلاحية الأدمن على قاعدة البيانات." : "تعذر الحفظ على قاعدة البيانات. تحقق من الإنترنت."; syncNote(m); setTimeout(()=>syncNote(""), 5000); }
 async function loadAdmin(){
   const list = await FB.listStudents(); DB.students = list;
-  const st = await FB.getSettings().catch(()=>null); if(st && st.cutoff) DB.cfg.cutoff = st.cutoff;
+  const st = await FB.getSettings().catch(()=>null); 
   try{ localStorage.setItem(LS, JSON.stringify(DB)); }catch(e){}
 }
 async function adminLogin(form){
@@ -844,7 +897,6 @@ async function adminLogin(form){
 
 function nextAfterLogin(st){
   let n = ""; try{ n = sessionStorage.getItem("sg-next") || ""; sessionStorage.removeItem("sg-next"); }catch(e){}
-  if(!scaleDone(st)) return U.scale;
   return n && /^[a-z0-9-]+\.html(\?[A-Za-z0-9=&_.-]*)?$/.test(n) && !/^(login|admin|index)\.html/.test(n) ? n : U.modules;
 }
 /* ---- تسجيل دخول الطالب على قاعدة البيانات ---- */
@@ -932,7 +984,7 @@ async function boot(){
         const su = fb.studentUser();
         if(su){
           if(me !== su) setMe(su);
-          const st = await fb.getSettings().catch(()=>null); if(st && st.cutoff) DB.cfg.cutoff = st.cutoff;
+          const st = await fb.getSettings().catch(()=>null); 
           // البيانات على الخادم هي المرجع؛ النسخة المحلية للطوارئ فقط (لو انقطع الإنترنت)
           let remote = null; try{ remote = await fb.getStudent(su); }catch(e){ remote = (e && e.code==="permission-denied") ? false : null; }
           if(remote) DB.students[su] = remote;
