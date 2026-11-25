@@ -482,3 +482,44 @@ textarea{min-height:64px;padding:8px 12px} input[type=text],input[type=password]
 .xind span .ic{width:14px;height:14px} .xind span.ok{border-color:#9ed9c0} .xind span.no{border-color:#f2b8b8}
 .chip.an{background:#e6efff;color:#1f55b8} .chip.ho{background:#e3f6ec;color:#0d7a4f}
 .kb summary{cursor:pointer;list-style:none} .kb summary h3{display:inline-flex;gap:6px;align-items:center} .kb[open] summary{margin-bottom:8px}
+
+/* ---------- «مُرشِد» robot ---------- */
+.bot-say{--bc:#7a5af5;--bc2:#efeaff;display:flex;gap:12px;align-items:flex-end;animation:pageIn .35s ease both}
+.bot-say.an{--bc:#2f6fe0;--bc2:#eaf1ff} .bot-say.ho{--bc:#13a36b;--bc2:#e6f7ee}
+.bot-av{flex-shrink:0;width:92px;filter:drop-shadow(0 8px 12px rgba(20,40,80,.16))}
+.bot-say.mini{align-items:center;gap:8px} .bot-say.mini .bot-av{width:46px}
+.bubble{position:relative;flex:1;min-width:0;background:#fff;border:2px solid var(--bc);border-radius:18px;padding:10px 14px;display:flex;flex-direction:column;gap:5px;box-shadow:0 6px 16px rgba(20,40,80,.06);transform-origin:right bottom;animation:pop .45s cubic-bezier(.2,1.4,.4,1) both .1s}
+.bubble::before{content:"";position:absolute;inset-inline-start:-10px;bottom:18px;width:16px;height:16px;background:#fff;border-inline-start:2px solid var(--bc);border-bottom:2px solid var(--bc);transform:rotate(45deg);border-radius:0 0 0 4px}
+[dir=rtl] .bubble::before,.bubble::before{transform:rotate(45deg)}
+.bot-say.mini .bubble{border-width:1.5px;border-radius:14px;padding:7px 12px;font-size:.92rem;background:var(--bc2)} .bot-say.mini .bubble::before{background:var(--bc2);bottom:50%;margin-bottom:-8px;border-width:1.5px}
+.bot-name{font-size:.74rem;font-weight:800;color:var(--bc);letter-spacing:.2px}
+.bubble h3{font-size:1rem;display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--ink)} .bubble p{font-size:.93rem;margin:0}
+.bubble details summary{cursor:pointer;font-size:.84rem;font-weight:700;color:var(--ink-2);display:flex;gap:5px;align-items:center;list-style:none} .bubble details summary .ic{width:15px;height:15px}
+.bot-say.gdec .bubble{padding:12px 16px}
+@keyframes pop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+/* robot drawing */
+.bot{width:100%;height:auto;display:block;overflow:visible}
+.bot .head,.bot .body{fill:#fff;stroke:var(--bc,#7a5af5);stroke-width:3}
+.bot .face{fill:#1d2b45} .bot .eyes ellipse{fill:#7ff3ff} .bot .eyes .gl{fill:#fff}
+.bot .ear,.bot .neck,.bot .leg{fill:var(--bc,#7a5af5)} .bot .ant{stroke:var(--bc,#7a5af5);stroke-width:3;stroke-linecap:round}
+.bot .ant-b{fill:#ffc53d;stroke:#fff;stroke-width:1.5} .bot.alert .ant-b{fill:#ff6b5e}
+.bot .chest{fill:var(--bc2,#efeaff);stroke:var(--bc,#7a5af5);stroke-width:2} .bot .bd-ic{fill:var(--bc,#7a5af5);stroke:var(--bc,#7a5af5)}
+.bot .arm{fill:none;stroke:var(--bc,#7a5af5);stroke-width:6;stroke-linecap:round} .bot .hand{fill:#fff;stroke:var(--bc,#7a5af5);stroke-width:3}
+.bot .mouth{fill:none;stroke:#7ff3ff;stroke-width:3;stroke-linecap:round} .bot .mouth.o{fill:#7ff3ff;stroke:none}
+.bot .brow{stroke:#7ff3ff;stroke-width:2.4;stroke-linecap:round} .bot .cheek{fill:#ff8fa3;opacity:.55}
+.bot-fig{animation:botBob 3.2s ease-in-out infinite;transform-origin:60px 130px}
+.bot .eyes{animation:blink 4.5s infinite;transform-origin:60px 43px}
+.bot .ant-b{animation:glow 1.6s ease-in-out infinite}
+.bot .arm.r,.bot .hand.r{animation:wave 2.4s ease-in-out .3s 2;transform-origin:86px 92px}
+.bot .mouth{animation:talk .22s ease-in-out 8 alternate .4s;transform-origin:60px 56px}
+.bot.think .eyes{transform:translate(2px,-2px)}
+@keyframes botBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes glow{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes wave{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg)}75%{transform:rotate(10deg)}}
+@keyframes talk{to{transform:scaleY(.4)}}
+.chip-bot{display:inline-block;width:26px;height:24px;vertical-align:middle;margin-inline-end:6px;--bc:#2f6fe0}
+:root[data-style="holistic"] .chip-bot{--bc:#13a36b}
+.ar-chip{display:flex;align-items:center}
+@media (max-width:700px){ .bot-av{width:64px} .bot-say.mini .bot-av{width:38px} }
+@media (prefers-reduced-motion:reduce){ .bot-fig,.bot .eyes,.bot .ant-b,.bot .arm.r,.bot .hand.r,.bot .mouth,.bubble{animation:none} }

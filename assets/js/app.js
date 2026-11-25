@@ -74,6 +74,39 @@ const WHY = {
   R13:"نمط التوجيه في المهارة هو آخر نمط حددته البيئة لك من أدائك."
 };
 const GE = m => m.ge || (m.ge = {d:{}, log:[]});
+
+/* ================= «مُرشِد»: الروبوت الذي ينطق بالتوجيه ================= */
+// mode: analytic | holistic | "" ، mood: happy | think | alert
+function bot(mode, mood, mini){
+  mood = mood || "happy";
+  const badge = mode==="analytic"
+    ? `<g class="bd-ic"><rect x="49" y="104" width="7" height="5" rx="1.5"/><rect x="56" y="99" width="7" height="10" rx="1.5"/><rect x="63" y="94" width="7" height="15" rx="1.5"/></g>`
+    : mode==="holistic"
+    ? `<g class="bd-ic"><circle cx="60" cy="101" r="3.4"/><circle cx="51" cy="95" r="2.6"/><circle cx="69" cy="95" r="2.6"/><circle cx="51" cy="107" r="2.6"/><circle cx="69" cy="107" r="2.6"/><path d="M60 101 51 95M60 101 69 95M60 101 51 107M60 101 69 107" stroke-width="1.6"/></g>`
+    : `<g class="bd-ic"><path d="M60 94l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></g>`;
+  const mouth = mood==="think" ? `<path class="mouth" d="M53 58q7-3 14 0"/>` : mood==="alert" ? `<ellipse class="mouth o" cx="60" cy="58" rx="4" ry="3.2"/>` : `<path class="mouth" d="M51 55q9 8 18 0"/>`;
+  const brows = mood==="think" ? `<path class="brow" d="M42 35l9-3M69 32l9 3"/>` : mood==="alert" ? `<path class="brow" d="M42 31l9 1M69 32l9-1"/>` : "";
+  const vb = mini ? "18 4 84 74" : "0 0 120 140";
+  return `<svg class="bot ${mood}" viewBox="${vb}" aria-hidden="true">
+    <g class="bot-fig">
+      <line class="ant" x1="60" y1="16" x2="60" y2="7"/><circle class="ant-b" cx="60" cy="6" r="4.5"/>
+      <rect class="ear" x="20" y="34" width="8" height="18" rx="4"/><rect class="ear" x="92" y="34" width="8" height="18" rx="4"/>
+      <rect class="head" x="26" y="16" width="68" height="56" rx="20"/>
+      <rect class="face" x="34" y="25" width="52" height="40" rx="14"/>
+      ${brows}<g class="eyes"><ellipse cx="50" cy="43" rx="4.6" ry="5.6"/><ellipse cx="70" cy="43" rx="4.6" ry="5.6"/><circle class="gl" cx="51.6" cy="41" r="1.5"/><circle class="gl" cx="71.6" cy="41" r="1.5"/></g>
+      <circle class="cheek" cx="42" cy="54" r="3"/><circle class="cheek" cx="78" cy="54" r="3"/>${mouth}
+      ${mini ? "" : `<rect class="neck" x="52" y="71" width="16" height="7" rx="3"/>
+      <path class="arm l" d="M34 92q-12 6-14 20"/><path class="arm r" d="M86 92q13-8 16-22"/><circle class="hand l" cx="20" cy="113" r="5"/><circle class="hand r" cx="102" cy="69" r="5"/>
+      <rect class="body" x="32" y="77" width="56" height="46" rx="16"/><rect class="chest" x="44" y="88" width="32" height="25" rx="8"/>${badge}
+      <rect class="leg" x="44" y="121" width="10" height="11" rx="4"/><rect class="leg" x="66" y="121" width="10" height="11" rx="4"/>`}
+    </g></svg>`;
+}
+// فقاعة كلام الروبوت. size: big (قرار التوجيه) | mini (تلميح أثناء النشاط)
+function botSay(html, o){
+  o = o || {}; const mode = o.mode==null ? (PNAME ? (A?"analytic":"holistic") : "") : o.mode, mini = o.size==="mini";
+  return `<div class="bot-say ${mini?"mini":"lg"} ${mode==="analytic"?"an":mode==="holistic"?"ho":"nu"} ${o.cls||""}"><div class="bot-av">${bot(mode, o.mood, mini)}</div>
+    <div class="bubble">${o.name===false?"":`<span class="bot-name">${o.name||"مُرشِد"}${o.tag?` · ${o.tag}`:""}</span>`}${html}</div></div>`;
+}
 function preProfile(m){ const t = MOD.testTags, a = (m.pre&&m.pre.a)||[]; const sc = tag => { const ix = t.map((x,k)=>x===tag?k:-1).filter(k=>k>=0); return ix.length ? ix.filter(k=>a[k]===MOD.test[k].k).length/ix.length : null; };
   return {p:sc("p"), w:sc("w")}; }
 // محرك الاستدلال: يمر على القواعد بالترتيب ويطبّق أول قاعدة يتحقق شرطها
@@ -209,6 +242,7 @@ function pInstructions(){
     <h2 class="sec"><span class="si">${ic("steps")}</span>خطوات السير داخل البيئة</h2>
     <div class="g3">${steps.map((s,k)=>`<div class="tile"><span class="stepno">${k+1}</span><div class="ti">${ic(s[0])}</div><h3>${s[1]}</h3><p class="muted small">${s[2]}</p></div>`).join("")}</div>
     <h2 class="sec"><span class="si">${ic("brain")}</span>التوجيه الذكي</h2>
+    ${botSay(`<p>أنا <b>مُرشِد</b>، المرشد الذكي في هذه البيئة. أتابع أداءك وأختار لك التوجيه المناسب في كل نشاط، وأشرح لك سبب اختياري.</p>`, {mode:"", mood:"happy", tag:"مرحباً بك"})}
     <div class="def">${ic("brain")}<div>تعمل البيئة كنظام خبير: في نهاية محتوى كل موضوع تجيب عن سؤالين قصيرين (مؤشر الأداء)، أحدهما عن الجزء والآخر عن الكل. تحلل البيئة إجابتك وأداءك في النشاط السابق، وتطبق قواعد التوجيه لتحدد نوع التوجيه المناسب لك في النشاط، وتوضح لك سبب اختيارها. وقد يتغير التوجيه أثناء النشاط إذا احتجت إلى دعم أكبر.</div></div>
     <div class="g2"><div class="def">${ic("steps")}<div><b>التوجيه التحليلي (من الجزء إلى الكل)</b><br>المهمة مقسمة إلى خطوات فرعية متتابعة، تنجز خطوة ثم تُفتح التالية، مع تغذية راجعة عند كل إجراء.</div></div>
       <div class="def">${ic("map")}<div><b>التوجيه الكلي (من الكل إلى الجزء)</b><br>المهمة كاملة مع خريطة تربط جوانبها وعلاقاتها، ترى الصورة الكلية أولاً ثم تكوّن تصوراً متكاملاً.</div></div></div>
@@ -363,9 +397,10 @@ function guideBanner(i){
   const st = S(), d = decOf(st, i), mode = guideNow(st, i), rid = ruleOf(st, i); if(!mode) return "";
   const an = mode==="analytic", ind = d ? [["steps","سؤال الجزء", d.dp?"صحيح":"غير صحيح", d.dp],["map","سؤال الكل", d.dw?"صحيح":"غير صحيح", d.dw]] : [];
   if(d && i>0){ const pv = Math.max((S().m.need||{})["L"+(i-1)+".a"]||0, 0); ind.push(["bulb","الإرشاد في النشاط السابق", HELP[pv], pv<2]); }
-  return `<div class="xpl ${an?"an":"ho"}"><div class="xh"><b>${ic(an?"steps":"map")}</b><div><small>قرار التوجيه الذكي</small><h3>التوجيه ${an?"التحليلي":"الكلي"}${d&&d.sw?` <span class="chip amber">${ic("refresh")}تحوّل أثناء النشاط</span>`:""}</h3></div></div>
+  const mood = d && d.sw ? "alert" : (d && d.dp && d.dw ? "happy" : "think");
+  return botSay(`<h3>سأوجهك ${an?"توجيهاً تحليلياً: من الجزء إلى الكل":"توجيهاً كلياً: من الكل إلى الجزء"}${d&&d.sw?` <span class="chip amber">${ic("refresh")}غيّرت التوجيه أثناء النشاط</span>`:""}</h3>
     <p>${WHY[rid]||""}</p>
-    <details><summary>${ic("info")}لماذا هذا القرار؟</summary><div class="xind">${ind.map(x=>`<span class="${x[3]?"ok":"no"}">${ic(x[0])}${x[1]}: <b>${x[2]}</b></span>`).join("")}<span>${ic("brain")}القاعدة المطبقة: <b dir="ltr">${rid}</b> · ${RID[rid]?RID[rid].when:""}</span></div></details></div>`;
+    <details><summary>${ic("info")}لماذا هذا القرار؟</summary><div class="xind">${ind.map(x=>`<span class="${x[3]?"ok":"no"}">${ic(x[0])}${x[1]}: <b>${x[2]}</b></span>`).join("")}<span>${ic("brain")}القاعدة المطبقة: <b dir="ltr">${rid}</b> · ${RID[rid]?RID[rid].when:""}</span></div></details>`, {mode, mood, tag:"قرار التوجيه الذكي", cls:"gdec"});
 }
 function pLesson(){
   const l = MOD.lessons[PI];
@@ -406,7 +441,7 @@ function pActivity(){
     if(pr.type==="classify") product = classifyH(m,K+".a",pr.cats,pr.items.map(x=>[x.t,x.c,x.why]),pr.hintH,"صنّف البطاقات كلها ثم تحقق",pr.ex,i);
     product += `<div class="stack s"><h3 class="sec"><span class="si">${ic("map")}</span>تصورك المتكامل</h3><p class="muted">اكتب تصوراً واحداً يجمع جوانب التوجيه السابقة ويربط بينها.</p>${ta(`${K}.H.all`,"اكتب تصورك المتكامل هنا")}</div>`;
   }
-  const startHint = baseLv(i)>=1 && !done ? `<div class="fb hint">${ic("bulb")}<span><b>تلميح موجه:</b> ${A ? `ابدأ بـ «${a.A[0]}»، ولا تنتقل للخطوة التالية قبل إتمامها.` : `قبل أن تبدأ، اربط بين «${a.H[0]}» و«${a.H[1]||a.H[0]}»، ثم انظر لباقي الجوانب في ضوئهما.`}${pr.type==="classify"&&HINT_A[i]?" "+HINT_A[i]:""}</span></div>` : "";
+  const startHint = baseLv(i)>=1 && !done ? botSay(`<b>تلميح موجه:</b> ${A ? `ابدأ بـ «${a.A[0]}»، ولا تنتقل للخطوة التالية قبل إتمامها.` : `قبل أن تبدأ، اربط بين «${a.H[0]}» و«${a.H[1]||a.H[0]}»، ثم انظر لباقي الجوانب في ضوئهما.`}${pr.type==="classify"&&HINT_A[i]?" "+HINT_A[i]:""}`, {size:"mini", mood:"think", name:false}) : "";
   return head("pen",`النشاط التعليمي (${i+1})`,l.t)+guideBanner(i)+startHint+brief
     + (!A && MAP_LESSONS.includes(i) ? systemMap(m,K) : "")
     + `<div class="gpanel"><div class="gh">${ic(A?"steps":"map")}${A?"التوجيه التحليلي: نفّذ المهمة خطوة بخطوة":"التوجيه الكلي: كوّن الصورة الكاملة أولاً"}</div><div class="gb">${guide}</div></div>`
@@ -414,8 +449,8 @@ function pActivity(){
     + pager({href:LU(i,"c"), t:"المحتوى"}, {act:"doneAct", t:"التقويم الذاتي"});
 }
 const helpChip = lv => lv ? `<span class="chip amber">${ic("bulb")}مستوى الإرشاد: ${HELP[lv]}</span>` : "";
-const workedEx = (ex,cats) => ex ? `<div class="worked"><b>${ic("book")}مثال محلول</b><div class="wk-q">${ex.t}</div><div class="wk-a"><span class="chip ok">${ic("check")}${cats[ex.c]}</span><span>${ex.why}</span></div></div>` : "";
-const reviewBox = i => `<div class="fb hint">${ic("refresh")}<span>راجع صفحة المحتوى، فيها تعريف كل فئة وأمثلتها. <a class="btn ghost sm" href="${LU(i,"c")}">${ic("book")}صفحة المحتوى</a></span></div>`;
+const workedEx = (ex,cats) => ex ? botSay("لاحظت أنك تحتاج دعماً أكبر، فإليك مثالاً محلولاً يوضح طريقة التفكير:", {size:"mini", mood:"think", name:false})+`<div class="worked"><b>${ic("book")}مثال محلول</b><div class="wk-q">${ex.t}</div><div class="wk-a"><span class="chip ok">${ic("check")}${cats[ex.c]}</span><span>${ex.why}</span></div></div>` : "";
+const reviewBox = i => botSay(`أقترح أن تراجع صفحة المحتوى، فيها تعريف كل فئة وأمثلتها. <a class="btn ghost sm" href="${LU(i,"c")}">${ic("book")}صفحة المحتوى</a>`, {size:"mini", mood:"think", name:false});
 // تحليلي: بطاقة واحدة في كل مرة، وتغذية راجعة محددة تتدرج مع الخطأ: تلميح ← مثال محلول ← مراجعة المحتوى وإظهار الإجابة
 function classifyA(m,i,pr){
   const key = "L"+i+".a", c = m.c[key] || (m.c[key] = {k:0, e:{}, ok:false}), n = pr.items.length;
@@ -426,7 +461,7 @@ function classifyA(m,i,pr){
     <div class="bigcard">${x.t}</div>
     <div class="cats" style="justify-content:center">${pr.cats.map((t,k)=>`<button class="cat ${fb&&fb.k===k?"sel":""}" ${solved?"disabled":""} data-act="cA" data-k="${k}">${t}</button>`).join("")}</div>
     ${solved?`<div class="fb ok">${ic("check")}<span><b>صحيح.</b> ${x.why}</span></div><div style="text-align:center"><button class="btn sm" data-act="cANext">${c.k<n-1?"البطاقة التالية":"إنهاء التصنيف"}${ic("next")}</button></div>`:""}
-    ${fb&&!fb.ok?`<div class="fb bad">${ic("x")}<span><b>ليست «${pr.cats[fb.k]}».</b> ${HINT_A[i]||""}</span></div>`:""}
+    ${fb&&!fb.ok?`<div class="fb bad">${ic("x")}<span><b>ليست «${pr.cats[fb.k]}».</b></span></div>`+(HINT_A[i]?botSay(`<b>تلميح:</b> ${HINT_A[i]}`, {size:"mini", mood:"think", name:false}):""):""}
     ${!solved&&lv>=2?workedEx(pr.ex,pr.cats):""}
     ${!solved&&lv>=3?reviewBox(i)+`<div class="fb info">${ic("info")}<span>الإجابة الصحيحة: <b>${pr.cats[x.c]}</b>. ${x.why} اختر الفئة الصحيحة لتكمل.</span></div>`:""}`;
 }
@@ -437,7 +472,7 @@ function classifyH(m,key,cats,items,hint,title,ex,li){
   return `<div class="row"><h3 class="sec grow"><span class="si">${ic("shapes")}</span>${title}</h3>${helpChip(lv)}</div>
     ${items.map((x,j)=>{ const st = c.chk ? (c.pick[j]===x[1]?"r":"w") : ""; return `<div class="citem ${st}"><b>${x[0]}</b><div class="cats">${cats.map((t,k)=>`<button class="cat ${c.pick[j]===k?"sel":""}" ${c.ok?"disabled":""} data-act="cH" data-key="${key}" data-j="${j}" data-k="${k}">${t}</button>`).join("")}</div>${c.ok&&x[2]?`<span class="small">${x[2]}</span>`:""}${!c.ok&&lv>=3&&st==="w"?`<span class="small">الصحيح: <b>${cats[x[1]]}</b>${x[2]?" · "+x[2]:""}</span>`:""}</div>`; }).join("")}
     ${c.chk&&!c.ok?`<div class="fb bad">${ic("x")}<span><b>${right} من ${items.length} في موضعها الصحيح.</b> العناصر المظللة بالأحمر تحتاج إعادة نظر.</span></div>`:""}
-    ${!c.ok&&lv>=1&&hint?`<div class="fb hint">${ic("bulb")}<span>${hint}</span></div>`:""}
+    ${!c.ok&&lv>=1&&hint?botSay(`<b>تلميح:</b> ${hint}`, {size:"mini", mood:"think", name:false}):""}
     ${!c.ok&&lv>=2?workedEx(ex,cats):""}
     ${!c.ok&&lv>=3?reviewBox(li):""}
     ${c.ok?`<div class="fb ok">${ic("check")}<span><b>تصنيف صحيح كله.</b> لاحظ كيف تتوزع العناصر على الفئات كمجموعة واحدة.</span></div>`:`<div class="row"><button class="btn sm" data-act="cHCheck" data-key="${key}" data-n="${items.length}">${ic("check")}تحقق من التصنيف</button><span class="err" id="e-${key.replace(/\./g,"-")}"></span></div>`}`;
@@ -560,7 +595,7 @@ function arChip(){
   if(AS.phase==="overview") txt = AS.play>=0 ? `${AS.play+1}. ${SK.steps[AS.play].t}` : (AS.view>=0 ? `${AS.view+1}. ${SK.steps[AS.view].t}` : "العرض الكلي للمهارة");
   else if(AS.phase==="run") txt = `${A?"الخطوة "+(AS.i+1)+": "+SK.steps[AS.i].a:(AS.view>=0&&AS.view!==AS.i?"معاينة: "+SK.steps[AS.view].t:(AS.i+1)+". "+SK.steps[AS.i].t)}`;
   else if(AS.phase==="done") txt = "تمت المهارة بنجاح";
-  c.textContent = txt; c.hidden = !txt;
+  c.innerHTML = txt ? `<i class="chip-bot">${bot(A?"analytic":"holistic", AS.phase==="done"?"happy":"happy", true)}</i><span>${esc(txt)}</span>` : ""; c.hidden = !txt;
 }
 function setModel(k){ if(AS.gl) AR.setStep(k); }
 const stepCard = (k, big) => { const st = SK.steps[k]; return `<div class="ar-step ${big?"focus":""}"><div class="ar-sh"><b>${ic(st.icon)}</b><div><small>الخطوة ${k+1} من ${NS}</small><h3>${A?st.a:st.t}</h3></div></div>
